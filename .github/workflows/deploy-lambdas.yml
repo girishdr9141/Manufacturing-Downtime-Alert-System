@@ -1,0 +1,53 @@
+name: Deploy AWS Lambdas CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'lambda/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Zip and Deploy MfgIncidentHandler
+        run: |
+          cd lambda
+          zip incident_handler.zip incident_handler.py
+          aws lambda update-function-code --function-name MfgIncidentHandler --zip-file fileb://incident_handler.zip
+
+      - name: Zip and Deploy MfgFetchTickets
+        run: |
+          cd lambda
+          zip fetch_tickets.zip fetch_tickets.py
+          aws lambda update-function-code --function-name MfgFetchTickets --zip-file fileb://fetch_tickets.zip
+
+      - name: Zip and Deploy MfgResolveTicket
+        run: |
+          cd lambda
+          zip resolve_ticket.zip resolve_ticket.py
+          aws lambda update-function-code --function-name MfgResolveTicket --zip-file fileb://resolve_ticket.zip
+
+      - name: Zip and Deploy MfgSendCommand
+        run: |
+          cd lambda
+          zip send_command.zip send_command.py
+          aws lambda update-function-code --function-name MfgSendCommand --zip-file fileb://send_command.zip
+
+      - name: Zip and Deploy MfgExportCSV
+        run: |
+          cd lambda
+          zip export_csv.zip export_csv.py
+          aws lambda update-function-code --function-name MfgExportCSV --zip-file fileb://export_csv.zip

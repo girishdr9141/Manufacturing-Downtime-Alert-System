@@ -79,3 +79,30 @@ For ALL of these functions, when creating them, choose **Use an existing role** 
 3. When the Auth Screen appears, paste your **API Gateway Invoke URL**.
 4. In your local terminal, run `python simulator/plasma_generator.py`.
 5. Watch the dashboard come alive with Maps, Charts, and Remote Commands!
+
+## Phase 6: Automated CI/CD Pipeline (GitHub Actions)
+You now have a fully automated backend deployment pipeline! To make it work, GitHub needs an AWS Access Key.
+
+**Step 1: Create an IAM User in AWS**
+1. Search for **IAM** in the AWS Console.
+2. Click **Users** on the left, then **Create user**. Name it `github-actions-deployer`.
+3. Click Next. Select **Attach policies directly**.
+4. Search for and check **AWSLambda_FullAccess**. Click Next, then Create user.
+5. Click on the newly created `github-actions-deployer` user.
+6. Go to the **Security credentials** tab.
+7. Scroll down to **Access keys** and click **Create access key**.
+8. Select **Third-party service**, check the confirmation box, and click Next.
+9. Click Create. Leave this screen open so you can copy the keys!
+
+**Step 2: Add Secrets to GitHub**
+1. Go to your `Manufacturing-Downtime-Alert-System` repository on GitHub.
+2. Click the **Settings** tab.
+3. On the left menu, scroll down to **Secrets and variables** and click **Actions**.
+4. Click the green **New repository secret** button.
+5. Name: `AWS_ACCESS_KEY_ID`
+   - Paste the Access key from AWS into the Secret box and click Add secret.
+6. Click **New repository secret** again.
+7. Name: `AWS_SECRET_ACCESS_KEY`
+   - Paste the Secret access key from AWS into the Secret box and click Add secret.
+
+Done! Now, every time you update your Python files and push to GitHub, the cloud servers will automatically deploy the changes to your AWS Lambda functions!

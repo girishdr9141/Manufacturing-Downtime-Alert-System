@@ -13,28 +13,30 @@ In manufacturing, machine downtime is incredibly costly. Traditionally, respondi
 **The Solution:** This project simulates a fully automated **Predictive Maintenance & IT Ticketing System**.
 By leveraging Edge computing and Serverless Cloud technology, the system analyzes telemetry data in real-time. It detects anomalies and gradual wear-and-tear, instantly alerts the maintenance team via Discord (ChatOps), and automatically generates an IT Helpdesk ticket displayed on a custom Web Portal.
 
-## 🏗️ Phase 2 Architecture
+## 🏗️ Phase 3 & 4 Architecture
 
 ```mermaid
 graph LR
-    A[Machine Edge Simulator] -->|mTLS Secured MQTT| B(AWS IoT Core)
-    B -->|IoT Rule| C{AWS Lambda: Incident Handler}
-    B -->|IoT Rule| D[(DynamoDB: Telemetry Logs)]
-    C -->|Creates Ticket| E[(DynamoDB: IT Tickets)]
-    C -->|Webhook Alert| F[Discord ChatOps]
+    A[Machine Simulator] <-->|MQTT (Bi-Directional)| B(AWS IoT Core)
+    B -->|IoT Rule| C{Lambda: Incident Handler}
+    C -->|Simulates| AI[AI Diagnostic Engine]
+    AI -->|Creates Ticket & Runbook| E[(DynamoDB: IT Tickets)]
     
-    G[Web Portal UI] -->|HTTP GET| H(API Gateway)
-    H -->|Triggers| I{AWS Lambda: Fetch Tickets}
-    I -->|Reads| E
+    G[Vercel PWA Web Portal] <-->|HTTP CRUD| H(API Gateway)
+    H -->|Proxy| I{AWS Lambdas: Fetch/Resolve/Command}
+    I <--> E
+    I -->|Immutable Logs| AL[(DynamoDB: Audit Logs)]
+    
+    GH[GitHub Actions] -->|CI/CD Pipeline| I
 ```
 
 ## 🌟 Key Technical Features
 
-1. **Predictive Maintenance Simulation:** The edge devices simulate gradual bearing wear (rising vibration). The cloud detects this before failure and issues a proactive maintenance ticket.
-2. **ChatOps Integration:** Replaces old-fashioned emails by sending beautifully formatted rich-embed Webhooks directly to a Discord IT channel.
-3. **Full-Stack DX Web Portal:** A premium, glassmorphic HTML/CSS/JS dashboard that interacts with a serverless API (API Gateway + Lambda) to display live support tickets dynamically.
-4. **Secure Edge Connectivity (IoT):** The simulated machines connect to AWS IoT Core using X.509 Certificates and mutual TLS (mTLS).
-5. **Event-Driven Serverless Compute:** Utilizes AWS Lambda for processing anomalous data and serving API requests with near-zero operational cost.
+1. **Enterprise CI/CD Pipeline:** Fully automated deployments using GitHub Actions. Every push to the `main` branch zips and deploys Python code directly to AWS Lambda, ensuring zero-downtime continuous integration.
+2. **Cloud-to-Device IoT Control:** Bi-directional MQTT communication allows the Web Portal to send Emergency Stop commands *down* from the cloud to the edge devices.
+3. **Automated AI Diagnostics:** Event-driven Lambdas analyze machine error codes and attach step-by-step diagnostic runbooks to IT tickets.
+4. **Zero-Trust Audit Logging:** Every ticket resolution or remote command generates an immutable record in a secondary DynamoDB Audit table.
+5. **Full-Stack DX Web Portal (PWA):** A progressive web app featuring Leaflet.js GPS Maps, Chart.js Analytics, and CSV Data Exports, interacting with a robust serverless API Gateway.
 
 ## 🛠️ Usage
 
