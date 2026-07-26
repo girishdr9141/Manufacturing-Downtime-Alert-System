@@ -297,8 +297,14 @@
         async function fetchTickets() {
             try {
                 const response = await fetch(`${API_URL}/tickets`);
-                const data = await response.json();
+                let data = await response.json();
                 
+                // Fallback: If API Gateway "Lambda Proxy Integration" was accidentally turned off in AWS,
+                // the data will be wrapped inside a 'body' string. This unwraps it automatically!
+                if (data.statusCode && typeof data.body === 'string') {
+                    data = JSON.parse(data.body);
+                }
+
                 const container = document.getElementById('tickets-container');
                 container.innerHTML = '';
 
