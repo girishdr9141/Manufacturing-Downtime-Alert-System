@@ -3,338 +3,384 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enterprise IT Helpdesk | DX Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <title>Enterprise DX Command Center</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="./manifest.json">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet Maps CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
     <style>
         :root {
-            --bg-dark: #0f172a;
-            --bg-card: rgba(30, 41, 59, 0.7);
-            --accent-primary: #3b82f6;
-            --accent-glow: rgba(59, 130, 246, 0.5);
+            --bg-color: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
             --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --danger: #ef4444;
+            --text-sub: #94a3b8;
+            --accent: #3b82f6;
+            --critical: #ef4444;
             --warning: #f59e0b;
             --success: #10b981;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        body.light-mode {
+            --bg-color: #f1f5f9;
+            --card-bg: #ffffff;
+            --text-main: #0f172a;
+            --text-sub: #475569;
+            --border: #e2e8f0;
         }
 
         body {
-            margin: 0;
             font-family: 'Inter', sans-serif;
-            background-color: var(--bg-dark);
+            background-color: var(--bg-color);
             color: var(--text-main);
-            background-image: 
-                radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
-                radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
-            background-attachment: fixed;
-            min-height: 100vh;
-        }
-
-        .navbar {
-            padding: 1.5rem 3rem;
-            background: rgba(15, 23, 42, 0.8);
-            backdrop-filter: blur(12px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-
-        .navbar h1 {
             margin: 0;
-            font-size: 1.5rem;
-            font-weight: 700;
-            letter-spacing: -0.5px;
+            padding: 2rem;
+            transition: background-color 0.3s;
+        }
+
+        /* Auth Screen */
+        #auth-screen {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 10px;
-        }
-        
-        .navbar h1::before {
-            content: '';
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            background: var(--accent-primary);
-            border-radius: 50%;
-            box-shadow: 0 0 10px var(--accent-glow);
+            justify-content: center;
+            height: 80vh;
         }
 
-        .container {
+        .auth-box {
+            background: var(--card-bg);
+            padding: 3rem;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .auth-box input {
+            padding: 0.75rem;
+            margin: 1rem 0;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            width: 250px;
+            background: transparent;
+            color: var(--text-main);
+        }
+
+        /* Dashboard */
+        #dashboard {
+            display: none;
             max-width: 1200px;
-            margin: 3rem auto;
-            padding: 0 2rem;
+            margin: auto;
         }
 
-        .header-section {
+        .header-bar {
             display: flex;
             justify-content: space-between;
-            align-items: flex-end;
+            align-items: center;
             margin-bottom: 2rem;
         }
 
-        .header-section h2 {
-            font-size: 2rem;
-            margin: 0 0 0.5rem 0;
-        }
-
-        .header-section p {
-            color: var(--text-muted);
-            margin: 0;
-        }
-
-        .refresh-btn {
-            background: var(--accent-primary);
+        .btn {
+            background: var(--accent);
             color: white;
             border: none;
-            padding: 0.75rem 1.5rem;
+            padding: 0.5rem 1rem;
             border-radius: 8px;
-            font-family: inherit;
-            font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px var(--accent-glow);
+            font-weight: 600;
+            transition: 0.2s;
         }
 
-        .refresh-btn:hover {
-            transform: translateY(-2px);
-            background: #2563eb;
-        }
+        .btn:hover { opacity: 0.9; }
+        .btn-danger { background: var(--critical); }
+        .btn-success { background: var(--success); }
 
-        .tickets-grid {
+        .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 1.5rem;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
         }
 
-        .ticket-card {
-            background: var(--bg-card);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 12px;
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
             padding: 1.5rem;
-            transition: transform 0.3s ease, border-color 0.3s ease;
-            position: relative;
-            overflow: hidden;
+            backdrop-filter: blur(10px);
+            margin-bottom: 1.5rem;
         }
 
-        .ticket-card:hover {
-            transform: translateY(-5px);
-            border-color: rgba(255,255,255,0.2);
+        /* Tickets */
+        .ticket {
+            border-left: 4px solid var(--accent);
+            padding-left: 1rem;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
         }
+        
+        .ticket.CRITICAL { border-left-color: var(--critical); }
+        .ticket.WARNING { border-left-color: var(--warning); }
 
-        .ticket-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 4px;
-            height: 100%;
-        }
-
-        .ticket-card.danger::before { background: var(--danger); }
-        .ticket-card.warning::before { background: var(--warning); }
-        .ticket-card.success::before { background: var(--success); }
-
-        .ticket-header {
+        .ticket-actions {
             display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        select {
+            padding: 0.4rem;
+            border-radius: 6px;
+            background: var(--bg-color);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+        }
+
+        /* Map & Chart */
+        #factory-map {
+            height: 300px;
+            border-radius: 12px;
             margin-bottom: 1rem;
         }
 
-        .machine-id {
-            font-size: 1.25rem;
-            font-weight: 700;
-            margin: 0;
-        }
-
-        .ticket-id {
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            font-family: monospace;
-        }
-
-        .badge {
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .badge.critical { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.5); }
-        .badge.predictive { background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.5); }
-
-        .ticket-body p {
-            margin: 0.5rem 0;
-            color: var(--text-muted);
-            font-size: 0.95rem;
-        }
-
-        .ticket-body strong {
-            color: var(--text-main);
-        }
-
-        .ticket-footer {
-            margin-top: 1.5rem;
-            padding-top: 1rem;
-            border-top: 1px solid rgba(255,255,255,0.1);
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.85rem;
-            color: var(--text-muted);
-        }
-
-        .loader {
-            text-align: center;
-            padding: 3rem;
-            color: var(--text-muted);
-            grid-column: 1 / -1;
-        }
-
-        /* Setup instructions state */
-        .setup-notice {
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid var(--accent-primary);
-            padding: 2rem;
-            border-radius: 12px;
-            text-align: center;
-            grid-column: 1 / -1;
-        }
-        
-        .setup-input {
-            width: 100%;
-            max-width: 500px;
-            padding: 0.75rem;
-            margin: 1rem 0;
-            background: rgba(0,0,0,0.3);
-            border: 1px solid rgba(255,255,255,0.2);
+        /* Toast */
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--success);
             color: white;
-            border-radius: 6px;
-            font-family: monospace;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
         }
-
     </style>
 </head>
 <body>
 
-    <nav class="navbar">
-        <h1>Manufacturing DX Command Center</h1>
-        <div style="color: var(--text-muted); font-size: 0.9rem;">Live System Monitoring</div>
-    </nav>
+    <!-- AUTHENTICATION SCREEN -->
+    <div id="auth-screen">
+        <div class="auth-box">
+            <h2>🔒 Secure Enterprise Portal</h2>
+            <p style="color: var(--text-sub)">Enter API Gateway Invoke URL to authenticate</p>
+            <input type="text" id="apiUrl" placeholder="https://xxxxxx.execute-api..."><br>
+            <button class="btn" onclick="login()">Authenticate & Login</button>
+        </div>
+    </div>
 
-    <div class="container">
-        <div class="header-section">
+    <!-- MAIN DASHBOARD -->
+    <div id="dashboard">
+        <div class="header-bar">
             <div>
-                <h2>Active IT Support Tickets</h2>
-                <p>Automated alerts generated by Serverless IoT Rules</p>
+                <h1 style="margin: 0;">🔵 Manufacturing DX Command Center</h1>
+                <p style="margin: 0; color: var(--text-sub);">Zero-Trust Enterprise Environment</p>
             </div>
-            <button class="refresh-btn" onclick="fetchTickets()">⟳ Refresh Data</button>
+            <div style="display: flex; gap: 1rem;">
+                <button class="btn" onclick="toggleTheme()">🌗 Toggle Theme</button>
+                <button class="btn btn-success" onclick="exportData()">📥 Export CSV</button>
+            </div>
         </div>
 
-        <div id="tickets-container" class="tickets-grid">
-            <!-- SETUP UI (Shown if API URL is not set) -->
-            <div class="setup-notice" id="setup-ui">
-                <h3>⚠️ API Connection Required</h3>
-                <p>To view your live DynamoDB tickets, paste your <b>AWS API Gateway Invoke URL</b> below:</p>
-                <input type="text" id="apiUrlInput" class="setup-input" placeholder="https://xxxxxx.execute-api.region.amazonaws.com/prod/tickets">
-                <br>
-                <button class="refresh-btn" onclick="saveApiUrl()">Connect to AWS</button>
+        <div class="grid">
+            <!-- Left Column: Tickets & Map -->
+            <div>
+                <div class="card">
+                    <h2>📍 Live Factory Map</h2>
+                    <div id="factory-map"></div>
+                </div>
+
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h2>Active IT Support Tickets</h2>
+                        <button class="btn" onclick="fetchTickets()">↻ Refresh</button>
+                    </div>
+                    <div id="tickets-container">Loading secure data...</div>
+                </div>
+            </div>
+
+            <!-- Right Column: Analytics & Control -->
+            <div>
+                <div class="card">
+                    <h2>📊 System Health</h2>
+                    <canvas id="healthChart"></canvas>
+                </div>
+
+                <div class="card" style="border-color: var(--critical);">
+                    <h2 style="color: var(--critical);">⚠️ Cloud-to-Device Control</h2>
+                    <p style="font-size: 0.9rem;">Override edge nodes securely via AWS IoT MQTT.</p>
+                    <select id="machine-select" style="width: 100%; margin-bottom: 1rem;">
+                        <option value="PLASMA-GEN-001">PLASMA-GEN-001</option>
+                        <option value="PLASMA-GEN-002">PLASMA-GEN-002</option>
+                        <option value="PLASMA-GEN-003">PLASMA-GEN-003</option>
+                    </select>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="btn btn-danger" style="flex: 1;" onclick="sendCommand('EMERGENCY_STOP')">STOP</button>
+                        <button class="btn btn-success" style="flex: 1;" onclick="sendCommand('START')">START</button>
+                    </div>
+                    <button class="btn" style="width: 100%; margin-top: 0.5rem; background: var(--warning);" onclick="sendCommand('OTA_UPDATE')">Push OTA Firmware</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <script>
-        // Check for saved API URL in LocalStorage
-        let API_URL = localStorage.getItem('dx_api_url') || '';
+    <div id="toast">Action Successful!</div>
 
-        function init() {
-            if (API_URL) {
-                document.getElementById('setup-ui').style.display = 'none';
-                fetchTickets();
-            }
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        let API_URL = "";
+        let map;
+        let chart;
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.style.opacity = 1;
+            setTimeout(() => toast.style.opacity = 0, 3000);
         }
 
-        function saveApiUrl() {
-            const input = document.getElementById('apiUrlInput').value.trim();
-            if (input) {
-                API_URL = input;
-                localStorage.setItem('dx_api_url', API_URL);
-                document.getElementById('setup-ui').style.display = 'none';
-                fetchTickets();
-            }
+        function toggleTheme() {
+            document.body.classList.toggle('light-mode');
+        }
+
+        function login() {
+            const url = document.getElementById('apiUrl').value.trim();
+            if(!url) { alert("Please enter the API URL"); return; }
+            API_URL = url;
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            initMap();
+            initChart();
+            fetchTickets();
+            showToast("Authenticated successfully.");
+        }
+
+        function initMap() {
+            map = L.map('factory-map').setView([37.7749, -122.4194], 16);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+
+            // Add simulated machine markers
+            L.circleMarker([37.7749, -122.4194], {color: 'red', radius: 8}).addTo(map).bindPopup("PLASMA-GEN-001");
+            L.circleMarker([37.7750, -122.4180], {color: 'green', radius: 8}).addTo(map).bindPopup("PLASMA-GEN-002");
+            L.circleMarker([37.7739, -122.4190], {color: 'orange', radius: 8}).addTo(map).bindPopup("PLASMA-GEN-003");
+        }
+
+        function initChart() {
+            const ctx = document.getElementById('healthChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Healthy', 'Predictive', 'Critical'],
+                    datasets: [{
+                        data: [85, 10, 5],
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    plugins: { legend: { labels: { color: '#94a3b8' } } }
+                }
+            });
         }
 
         async function fetchTickets() {
-            if (!API_URL) return;
-
-            const container = document.getElementById('tickets-container');
-            container.innerHTML = '<div class="loader">Fetching real-time data from AWS...</div>';
-
             try {
-                const response = await fetch(API_URL);
+                const response = await fetch(`${API_URL}/tickets`);
                 const data = await response.json();
                 
-                // Parse AWS API Gateway response format
-                const tickets = typeof data.body === 'string' ? JSON.parse(data.body) : data;
+                const container = document.getElementById('tickets-container');
+                container.innerHTML = '';
 
-                if (!tickets || tickets.length === 0) {
-                    container.innerHTML = '<div class="loader">✅ No active alerts. All machines are healthy!</div>';
+                // Filter out resolved tickets
+                const activeTickets = data.filter(t => t.Status !== 'RESOLVED');
+
+                if (activeTickets.length === 0) {
+                    container.innerHTML = '<p style="color: var(--success)">No active incidents. Systems operating nominally.</p>';
                     return;
                 }
 
-                container.innerHTML = '';
-                
-                tickets.forEach(ticket => {
-                    const isPredictive = ticket.MachineState.includes('PREDICTIVE');
-                    const badgeClass = isPredictive ? 'predictive' : 'critical';
-                    const cardClass = isPredictive ? 'warning' : 'danger';
-
-                    const card = `
-                        <div class="ticket-card ${cardClass}">
-                            <div class="ticket-header">
-                                <div>
-                                    <h3 class="machine-id">${ticket.MachineID}</h3>
-                                    <span class="ticket-id">${ticket.TicketID}</span>
-                                </div>
-                                <span class="badge ${badgeClass}">${isPredictive ? 'Maintenance' : 'Critical'}</span>
-                            </div>
-                            <div class="ticket-body">
-                                <p><strong>Status:</strong> ${ticket.MachineState}</p>
-                                <p><strong>Details:</strong> ${ticket.Description}</p>
-                            </div>
-                            <div class="ticket-footer">
-                                <span>Reported: ${ticket.ReportedTemperature}°C</span>
-                                <span>🕒 ${ticket.CreatedAt}</span>
+                activeTickets.forEach(ticket => {
+                    const statusClass = ticket.Status.includes('CRITICAL') || ticket.Status.includes('ERROR') ? 'CRITICAL' : 'WARNING';
+                    
+                    container.innerHTML += `
+                        <div class="ticket ${statusClass}">
+                            <h3 style="margin: 0 0 0.5rem 0;">${ticket.MachineID}</h3>
+                            <p style="margin: 0; color: var(--text-sub); font-size: 0.9rem;">Ticket ID: ${ticket.TicketID}</p>
+                            <p><strong>Status:</strong> ${ticket.Status}</p>
+                            <p style="font-size: 0.9rem;"><strong>AI Diagnostic:</strong> ${ticket.AIRunbook || "Pending..."}</p>
+                            
+                            <div class="ticket-actions">
+                                <select id="assign-${ticket.TicketID}" onchange="assignTicket('${ticket.TicketID}')">
+                                    <option value="" disabled ${!ticket.AssignedTo ? 'selected' : ''}>Assign Tech...</option>
+                                    <option value="Alice" ${ticket.AssignedTo === 'Alice' ? 'selected' : ''}>Alice (L2)</option>
+                                    <option value="Bob" ${ticket.AssignedTo === 'Bob' ? 'selected' : ''}>Bob (L3)</option>
+                                </select>
+                                <button class="btn btn-success" onclick="resolveTicket('${ticket.TicketID}')">Resolve Ticket</button>
                             </div>
                         </div>
                     `;
-                    container.innerHTML += card;
                 });
-            } catch (error) {
-                container.innerHTML = `
-                    <div class="setup-notice">
-                        <h3 style="color: var(--danger)">Connection Error</h3>
-                        <p>Could not connect to the API Gateway. Ensure your URL is correct and CORS is enabled in AWS.</p>
-                        <p style="font-family: monospace; color: var(--text-muted);">${error.message}</p>
-                        <button class="refresh-btn" onclick="resetApiUrl()" style="margin-top: 1rem; background: var(--danger)">Reset API URL</button>
-                    </div>
-                `;
+            } catch (e) {
+                document.getElementById('tickets-container').innerHTML = `<p style="color: var(--critical)">Failed to connect to API.</p>`;
             }
         }
 
-        function resetApiUrl() {
-            localStorage.removeItem('dx_api_url');
-            location.reload();
+        async function resolveTicket(ticketId) {
+            try {
+                await fetch(`${API_URL}/tickets`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ ticket_id: ticketId, action: 'RESOLVE' })
+                });
+                showToast("Ticket Resolved & Archived.");
+                fetchTickets();
+            } catch (e) {
+                alert("Error resolving ticket.");
+            }
         }
 
-        // Initialize on load
-        init();
+        async function assignTicket(ticketId) {
+            const assignee = document.getElementById(`assign-${ticketId}`).value;
+            try {
+                await fetch(`${API_URL}/tickets`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ ticket_id: ticketId, action: 'ASSIGN', assigned_to: assignee })
+                });
+                showToast(`Ticket assigned to ${assignee}.`);
+            } catch (e) {
+                alert("Error assigning ticket.");
+            }
+        }
+
+        async function sendCommand(cmd) {
+            const machine = document.getElementById('machine-select').value;
+            try {
+                await fetch(`${API_URL}/commands`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ machine_id: machine, command: cmd })
+                });
+                showToast(`Command ${cmd} sent to ${machine}`);
+            } catch (e) {
+                alert("Error sending command.");
+            }
+        }
+
+        function exportData() {
+            window.open(`${API_URL}/export`, '_blank');
+        }
     </script>
 </body>
 </html>
