@@ -1,0 +1,6 @@
+{
+  "name": "Enterprise DX Command Center",
+  "description": "Zero-Trust Single Page Application (SPA) Command Center dashboard for real-time edge device monitoring, C2D command dispatch, AI runbooks, and fleet analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
