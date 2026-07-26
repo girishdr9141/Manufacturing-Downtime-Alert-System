@@ -1,52 +1,6 @@
 import { Machine, Ticket } from './types';
 
-export const INITIAL_MACHINES: Machine[] = [
-  {
-    id: 'PLASMA-GEN-001',
-    name: 'High-Temp Plasma Reactor 001',
-    location: 'Facility Alpha - Sector 4B',
-    x: 28,
-    y: 35,
-    status: 'ERROR',
-    temperature: 87.4,
-    vibration: 8.2,
-    power_kw: 142.5,
-    rpm: 12400,
-    firmware: 'v2.4.1-edge',
-    lastPing: '2s ago',
-    ip_address: '10.240.12.101',
-  },
-  {
-    id: 'PLASMA-GEN-002',
-    name: 'High-Temp Plasma Reactor 002',
-    location: 'Facility Alpha - Sector 4C',
-    x: 62,
-    y: 42,
-    status: 'WARNING',
-    temperature: 71.8,
-    vibration: 4.1,
-    power_kw: 118.0,
-    rpm: 11800,
-    firmware: 'v2.4.1-edge',
-    lastPing: '1s ago',
-    ip_address: '10.240.12.102',
-  },
-  {
-    id: 'PLASMA-GEN-003',
-    name: 'High-Temp Plasma Reactor 003',
-    location: 'Facility Beta - Bay 12',
-    x: 78,
-    y: 72,
-    status: 'HEALTHY',
-    temperature: 54.2,
-    vibration: 1.8,
-    power_kw: 98.4,
-    rpm: 10500,
-    firmware: 'v2.5.0-edge',
-    lastPing: 'Just now',
-    ip_address: '10.240.14.055',
-  },
-];
+export const INITIAL_MACHINES: Machine[] = [];
 
 export const INITIAL_TICKETS: Ticket[] = [
   {

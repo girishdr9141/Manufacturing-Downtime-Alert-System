@@ -51,3 +51,15 @@ jobs:
           cd lambda
           zip export_csv.zip export_csv.py
           aws lambda update-function-code --function-name MfgExportCSV --zip-file fileb://export_csv.zip
+
+      - name: Zip and Deploy MfgIngestTelemetry
+        run: |
+          cd lambda
+          zip ingest_telemetry.zip ingest_telemetry.py
+          aws lambda update-function-code --function-name MfgIngestTelemetry --zip-file fileb://ingest_telemetry.zip || echo "Function not created yet, skipping deploy"
+
+      - name: Zip and Deploy MfgFetchMachines
+        run: |
+          cd lambda
+          zip fetch_machines.zip fetch_machines.py
+          aws lambda update-function-code --function-name MfgFetchMachines --zip-file fileb://fetch_machines.zip || echo "Function not created yet, skipping deploy"
