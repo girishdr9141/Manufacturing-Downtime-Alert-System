@@ -64,6 +64,17 @@ def lambda_handler(event, context):
 
         # 1. DynamoDB Ticket
         if DYNAMODB_TICKET_TABLE:
+            
+            # --- AI Diagnostic Engine (Simulated) ---
+            runbook = "AI DIAGNOSTIC: Standard visual inspection required."
+            if "CRITICAL" in status:
+                runbook = "AI DIAGNOSTIC: 1. Immediately isolate power to the RF generator. 2. Check coolant fluid levels (>80%). 3. Inspect primary cooling fan for blockages. 4. If fan is clear, replace thermal sensor T-04."
+            elif "ERROR_POWER" in status:
+                runbook = "AI DIAGNOSTIC: 1. Verify main breaker panel B-12. 2. Test input voltage across phases. 3. If voltage is present, replace internal power supply unit (PSU-A1)."
+            elif "PREDICTIVE" in status:
+                runbook = "AI DIAGNOSTIC: 1. Vibration anomaly detected in primary drive shaft. 2. Schedule downtime within 48 hours. 3. Replace ceramic bearings. 4. Re-calibrate alignment."
+            # ----------------------------------------
+            
             table = dynamodb.Table(DYNAMODB_TICKET_TABLE)
             table.put_item(Item={
                 'TicketID': ticket_id,
@@ -73,7 +84,8 @@ def lambda_handler(event, context):
                 'Status': 'OPEN',
                 'ReportedTemperature': str(temperature),
                 'MachineState': status,
-                'Description': description
+                'Description': description,
+                'AIRunbook': runbook
             })
             logger.info(f"Created Ticket: {ticket_id}")
 
