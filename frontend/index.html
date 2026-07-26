@@ -297,19 +297,25 @@
         async function fetchTickets() {
             try {
                 const response = await fetch(`${API_URL}/tickets`);
-                let data = await response.json();
+                const text = await response.text();
                 
-                // Fallback: If API Gateway "Lambda Proxy Integration" was accidentally turned off in AWS,
-                // the data will be wrapped inside a 'body' string. This unwraps it automatically!
-                if (data.statusCode && typeof data.body === 'string') {
-                    data = JSON.parse(data.body);
-                }
+                try {
+                    let data = JSON.parse(text);
+                    
+                    // Fallback for API Gateway non-proxy
+                    if (data.statusCode && typeof data.body === 'string') {
+                        data = JSON.parse(data.body);
+                    }
+                    
+                    if (!Array.isArray(data)) {
+                        throw new Error("Data is not an array! Raw response: " + text.substring(0, 100));
+                    }
 
-                const container = document.getElementById('tickets-container');
-                container.innerHTML = '';
+                    const container = document.getElementById('tickets-container');
+                    container.innerHTML = '';
 
-                // Filter out resolved tickets
-                const activeTickets = data.filter(t => t.Status !== 'RESOLVED');
+                    // Filter out resolved tickets
+                    const activeTickets = data.filter(t => t.Status !== 'RESOLVED');
 
                 if (activeTickets.length === 0) {
                     container.innerHTML = '<p style="color: var(--success)">No active incidents. Systems operating nominally.</p>';
@@ -337,8 +343,11 @@
                         </div>
                     `;
                 });
+                } catch(parseErr) {
+                    document.getElementById('tickets-container').innerHTML = `<p style="color: var(--critical); word-break: break-all;">PARSE ERROR: ${parseErr.message}</p>`;
+                }
             } catch (e) {
-                document.getElementById('tickets-container').innerHTML = `<p style="color: var(--critical)">Failed to connect to API.</p>`;
+                document.getElementById('tickets-container').innerHTML = `<p style="color: var(--critical);">NETWORK ERROR: ${e.message}</p>`;
             }
         }
 
