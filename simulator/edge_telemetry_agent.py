@@ -52,9 +52,11 @@ class EdgeMachine:
             self.status = "WARNING_HIGH_VIBRATION"
             self.vibration = 9.4
             self.temperature = 71.0
+            self.locked_error = True
         elif id_num == 15:
             self.status = "WARNING_COOLANT_TEMP"
             self.temperature = 83.0
+            self.locked_error = True
         elif id_num == 19:
             self.status = "ERROR_SENSOR_FAILURE"
             self.vibration = 0.0  # Sensor reads zero — failure
@@ -63,10 +65,12 @@ class EdgeMachine:
             self.status = "WARNING_BEARING_WEAR"
             self.vibration = 7.1
             self.rpm = 1100  # Sluggish RPM
+            self.locked_error = True
         elif id_num == 24:
             self.status = "PREDICTIVE_MAINTENANCE_DUE"
             self.temperature = 78.0
             self.vibration = 5.5
+            self.locked_error = True
         elif id_num == 5:
             self.status = "ERROR_COMM_TIMEOUT"
             self.power_kw = 0.1

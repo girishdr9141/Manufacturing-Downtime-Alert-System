@@ -6,6 +6,8 @@ import { ActiveTicketsWidget } from './components/ActiveTicketsWidget';
 import { C2DCommandPanel } from './components/C2DCommandPanel';
 import { ToastContainer } from './components/ToastContainer';
 import { OperatorDashboard } from './components/OperatorDashboard';
+import { FinancialImpactWidget } from './components/FinancialImpactWidget';
+import { useI18n } from './i18n';
 
 import { Ticket, Machine, ToastMessage, C2DCommandLog } from './types';
 
@@ -99,8 +101,10 @@ export default function App() {
   const [selectedMachineId,setSelectedMachineId]= useState<string>('');
   const [commandLogs,      setCommandLogs]      = useState<C2DCommandLog[]>([]);
   const [toasts,           setToasts]           = useState<ToastMessage[]>([]);
-  const [isSendingCommand, setIsSendingCommand] = useState(false);
   const [wsConnected,      setWsConnected]      = useState(false);
+  const [isSendingCommand, setIsSendingCommand] = useState(false);
+
+  const { t, lang, setLang } = useI18n();
 
   const [isDark,      setIsDark]      = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -294,7 +298,7 @@ export default function App() {
       channel.onmessage = (event) => {
         const msg = event.data;
         if (msg.type === 'ISSUE_RESOLVED') {
-          setTickets(prev => prev.map(t => t.ticket_id === msg.ticketId ? { ...t, status: 'RESOLVED' } : t));
+          setTickets(prev => prev.map(t => t.ticket_id === msg.ticketId ? { ...t, status: 'RESOLVED', resolved_at: new Date().toISOString() } : t));
           const ticket = tickets.find(t => t.ticket_id === msg.ticketId);
           if (ticket) ticketedMachines.current.delete(ticket.machine_id);
           
@@ -311,7 +315,7 @@ export default function App() {
 
   // ── Resolve ticket ─────────────────────────────────────────────────────────
   const handleResolveTicket = async (ticketId: string, expertName?: string, _notes?: string) => {
-    setTickets(prev => prev.map(t => t.ticket_id === ticketId ? { ...t, status: 'RESOLVED' } : t));
+    setTickets(prev => prev.map(t => t.ticket_id === ticketId ? { ...t, status: 'RESOLVED', resolved_at: new Date().toISOString() } : t));
     const ticket = tickets.find(t => t.ticket_id === ticketId);
     
     if (ticket) {
@@ -359,10 +363,10 @@ export default function App() {
   // ── Render: Auth ───────────────────────────────────────────────────────────
   if (!currentUser) {
     return (
-      <>
+      <div key="auth-view" className="w-full h-screen">
         <AuthScreen onLoginSuccess={handleLoginSuccess} isDark={isDark} onToggleTheme={() => setIsDark(!isDark)} />
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-      </>
+      </div>
     );
   }
 
@@ -370,7 +374,7 @@ export default function App() {
   if (userRole === 'Operator') {
     const assignedMachine = machines.find(m => m.id === assignedMachineId) || null;
     return (
-      <div className={`h-screen overflow-hidden ${isDark ? 'bg-slate-950' : 'bg-slate-100'} p-4 sm:p-6 transition-colors duration-500`}>
+      <div key="operator-view" className={`h-screen overflow-hidden ${isDark ? 'bg-slate-950' : 'bg-slate-100'} p-4 sm:p-6 transition-colors duration-500`}>
         <OperatorDashboard 
           machine={assignedMachine} 
           tickets={tickets} 
@@ -388,7 +392,7 @@ export default function App() {
   const openTickets      = tickets.filter(t => t.status !== 'RESOLVED').length;
 
   return (
-    <div className={`flex h-screen overflow-hidden font-sans transition-colors duration-300 ${isDark ? 'bg-slate-900 text-slate-100' : 'bg-slate-100 text-slate-900'}`}>
+    <div key="admin-view" className={`h-screen flex overflow-hidden font-sans transition-colors duration-500 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
 
       {/* ── Sidebar ── */}
       <aside className={`flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out border-r ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'} ${sidebarOpen ? 'w-60' : 'w-16'}`}>
@@ -396,8 +400,8 @@ export default function App() {
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">DX</div>
           {sidebarOpen && (
             <div className="overflow-hidden">
-              <p className={`font-bold text-sm leading-tight ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>Manufacturing DX</p>
-              <p className="text-xs text-blue-500">Command Center</p>
+              <p className={`font-bold text-sm leading-tight ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>{t('loginTitle')}</p>
+              <p className="text-xs text-blue-500">{t('commandCenter')}</p>
             </div>
           )}
         </div>
@@ -428,10 +432,10 @@ export default function App() {
               </div>
               <div className="overflow-hidden flex-1">
                 <p className={`text-xs font-semibold truncate ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{currentUser.name || currentUser.email}</p>
-                <p className="text-xs text-slate-500 truncate">Administrator</p>
+                <p className="text-xs text-slate-500 truncate">{t('adminRole')}</p>
               </div>
               <button onClick={handleLogout} className={`ml-auto flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors text-xs font-semibold border ${isDark ? 'bg-slate-800/50 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 border-transparent hover:border-rose-500/20' : 'bg-rose-50 hover:bg-rose-100 text-rose-600 border-rose-200'}`}>
-                ⇥ Logout
+                ⇥ {t('logout')}
               </button>
             </div>
           ) : (
@@ -448,13 +452,16 @@ export default function App() {
           </button>
           <div>
             <p className={`text-sm font-bold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
-              {NAV_ITEMS.find(n => n.id === activeNav)?.icon} {NAV_ITEMS.find(n => n.id === activeNav)?.label || 'Dashboard'}
+              {NAV_ITEMS.find(n => n.id === activeNav)?.icon} {t(NAV_ITEMS.find(n => n.id === activeNav)?.id as any) || t('dashboard')}
             </p>
-            <p className="text-xs text-slate-500">Zero-Trust Enterprise Environment</p>
+            <p className="text-xs text-slate-500">{t('zeroTrust')}</p>
           </div>
           <div className="ml-auto flex items-center gap-3">
+            <button onClick={() => setLang(lang === 'en' ? 'ja' : 'en')} className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors ${isDark ? 'border-slate-700 hover:bg-slate-800 text-slate-300' : 'border-slate-300 hover:bg-slate-200 text-slate-700'}`}>
+              {lang === 'en' ? 'EN' : 'JA'}
+            </button>
             <span className={`text-xs px-2 py-1 rounded-full font-medium ${wsConnected ? 'bg-emerald-500/20 text-emerald-400 animate-pulse' : 'bg-red-500/20 text-red-400'}`}>
-              {wsConnected ? 'WS CONNECTED' : 'WS OFFLINE'}
+              {wsConnected ? t('wsConnected') : t('wsOffline')}
             </span>
             <button onClick={() => setIsDark(!isDark)} className={`relative w-12 h-6 rounded-full transition-colors duration-300 flex items-center ${isDark ? 'bg-blue-600' : 'bg-slate-300'}`}>
               <span className={`absolute w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-300 flex items-center justify-center text-xs ${isDark ? 'translate-x-6' : 'translate-x-0.5'}`}>
@@ -468,22 +475,28 @@ export default function App() {
           {/* Overview bar */}
           <div className={`rounded-xl p-5 flex items-center justify-between ${isDark ? 'bg-slate-800/60 border border-slate-700' : 'bg-white border border-slate-200 shadow-sm'}`}>
             <div>
-              <h1 className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>Admin Operations Overview</h1>
+              <h1 className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>{t('adminOverview')}</h1>
               <p className={`text-sm mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                {wsConnected ? 'Live WebSocket Stream Active' : 'WebSocket Offline — Waiting to reconnect'}
+                {wsConnected ? t('wsConnected') : t('wsOffline')}
               </p>
             </div>
             <div className="hidden sm:flex gap-6">
               <div className="text-center">
                 <p className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>{machines.length}</p>
-                <p className="text-xs text-slate-500">Live Nodes</p>
+                <p className="text-xs text-slate-500">{t('liveNodes')}</p>
               </div>
               <div className="text-center">
                 <p className="text-2xl font-bold text-red-400">{openTickets}</p>
-                <p className="text-xs text-slate-500">Open Tickets</p>
+                <p className="text-xs text-slate-500">{t('openTickets')}</p>
               </div>
             </div>
           </div>
+
+          {(activeNav === 'dashboard' || activeNav === 'tickets') && (
+            <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-slate-800/80 bg-slate-900/50' : 'border-slate-200 bg-white shadow-sm'}`}>
+              <FinancialImpactWidget tickets={tickets} isDark={isDark} />
+            </div>
+          )}
 
           {(activeNav === 'dashboard' || activeNav === 'map') && (
             <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>

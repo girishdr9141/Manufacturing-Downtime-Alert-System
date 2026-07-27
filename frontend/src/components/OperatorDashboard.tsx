@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Machine, Ticket } from '../types';
-import { Activity, Thermometer, Zap, AlertOctagon, CheckCircle2, UserCheck, Bell, ClipboardCheck, LogOut } from 'lucide-react';
+import { useI18n } from '../i18n';
+import { Activity, Thermometer, Zap, AlertOctagon, CheckCircle2, UserCheck, Bell, ClipboardCheck, LogOut, CheckCircle, User, AlertTriangle, AlertCircle } from 'lucide-react';
 
 interface DispatchJob {
   ticketId: string;
@@ -27,6 +28,7 @@ interface OperatorDashboardProps {
 const MFG_CHANNEL = 'mfg_dx_notifications';
 
 export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, tickets, isDark, onLogout, currentUser, onToggleTheme }) => {
+  const { t, lang, setLang } = useI18n();
   const [assignedJobs, setAssignedJobs] = useState<DispatchJob[]>([]);
   const [newJobAlert, setNewJobAlert]   = useState<DispatchJob | null>(null);
 
@@ -66,7 +68,6 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, t
       channel.onmessage = (event) => {
         const msg = event.data;
         if (msg.type === 'EXPERT_DISPATCHED') {
-          // Only show if it's for this machine (or if no machine assigned yet, show all)
           if (!machine || msg.machineId === machine.id) {
             const job: DispatchJob = { ...msg, resolved: false };
             setAssignedJobs(prev => {
@@ -84,21 +85,25 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, t
     return () => channel?.close();
   }, [machine]);
 
-  // ── Mark a job as resolved and notify admin tab ─────────────────────────────
-  const markResolved = useCallback((job: DispatchJob) => {
-    setAssignedJobs(prev => prev.map(j => j.ticketId === job.ticketId ? { ...j, resolved: true } : j));
+  const markJobResolved = useCallback((ticketId: string) => {
+    setAssignedJobs(prev => prev.map(j => j.ticketId === ticketId ? { ...j, resolved: true } : j));
+    
+    // Find the job to get the machineId and expertName
+    const job = assignedJobs.find(j => j.ticketId === ticketId);
+    if (!job) return;
+
     try {
       const channel = new BroadcastChannel(MFG_CHANNEL);
       channel.postMessage({
         type: 'ISSUE_RESOLVED',
-        ticketId:   job.ticketId,
-        machineId:  job.machineId,
+        ticketId: job.ticketId,
+        machineId: job.machineId,
         expertName: job.expertName,
         resolvedAt: new Date().toLocaleTimeString(),
       });
       channel.close();
     } catch { /* ignore */ }
-  }, []);
+  }, [assignedJobs]);
 
   const activeTickets = tickets.filter(t => machine && t.machine_id === machine.id && t.status !== 'RESOLVED');
 
@@ -111,51 +116,51 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, t
 
   const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
 
-  const mStatus = machine?.status || 'AWAITING TELEMETRY';
+  const mStatus = machine?.status || t('awaitingTelemetry');
   const mTemp = machine?.temperature || 0;
   const mVib = machine?.vibration || 0;
   const mPower = machine?.power_kw || 0;
   const mRpm = machine?.rpm || 0;
 
   return (
-    <div className={`flex flex-col h-full space-y-4 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+    <div className={`flex flex-col h-full space-y-4 font-sans transition-colors duration-500 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
 
       {/* ── Incoming Job Alert Banner ── */}
       {newJobAlert && (
-        <div className="fixed top-4 right-4 z-50 w-80 animate-bounce-once">
-          <div className={`rounded-2xl border shadow-2xl p-4 ${isDark ? 'bg-slate-900 border-emerald-500/50' : 'bg-white border-emerald-400'}`}>
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center flex-shrink-0">
-                <Bell className="w-5 h-5 text-emerald-400 animate-pulse" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>🔧 Expert Assigned to You!</p>
-                <p className={`text-xs mt-0.5 ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}><strong>{newJobAlert.expertName}</strong> has been dispatched to your machine.</p>
-                <p className={`text-[10px] mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{newJobAlert.machineId} · {newJobAlert.ticketId}</p>
-              </div>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className={`max-w-md w-full rounded-2xl p-6 border shadow-2xl animate-in zoom-in-95 duration-300 ${isDark ? 'bg-slate-900 border-blue-500/30' : 'bg-white border-blue-200'}`}>
+            <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <User className="w-8 h-8 text-blue-500" />
             </div>
+            <h2 className={`text-2xl font-bold text-center mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('expertAssigned')}</h2>
+            <p className={`text-center mb-6 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+              <strong className="text-blue-500">{newJobAlert.expertName}</strong> {t('dispatchedTo')}
+            </p>
           </div>
         </div>
       )}
 
       {/* ── Header ── */}
-      <div className={`flex items-center justify-between p-5 rounded-2xl border ${card}`}>
-        <div>
+      <div className={`flex flex-col md:flex-row md:items-center justify-between p-5 rounded-2xl border ${card}`}>
+        <div className="mb-4 md:mb-0">
           <div className="flex items-center gap-3 mb-1">
             <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold">
               {(currentUser?.name || currentUser?.email || 'O')[0].toUpperCase()}
             </div>
             <div>
               <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{currentUser?.name || currentUser?.email}</p>
-              <p className={`text-[10px] font-mono ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Floor Operator</p>
+              <p className={`text-[10px] font-mono ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('operatorRole')}</p>
             </div>
           </div>
-          <h1 className="text-xl font-bold tracking-tight mt-3">{machine?.name || machine?.id || 'Unknown Machine'}</h1>
+          <h1 className="text-xl font-bold tracking-tight mt-3">{machine?.name || machine?.id || t('unknownMachine')}</h1>
           <p className={`text-xs font-mono mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
             ID: {machine?.id || '---'} · {machine?.location || '---'}
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <button onClick={() => setLang(lang === 'en' ? 'ja' : 'en')} className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors ${isDark ? 'border-slate-700 hover:bg-slate-800 text-slate-300' : 'border-slate-300 hover:bg-slate-200 text-slate-700'}`}>
+            {lang === 'en' ? 'EN' : 'JA'}
+          </button>
           <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-2 text-xs font-bold font-mono ${getStatusGlow(mStatus)}`}>
             <Activity className="w-4 h-4" />
             {mStatus}
@@ -168,21 +173,21 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, t
           </button>
 
           <button onClick={onLogout} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold transition-colors">
-            <LogOut className="w-3.5 h-3.5" /> End Shift
+            <LogOut className="w-3.5 h-3.5" /> {t('endShift')}
           </button>
         </div>
       </div>
 
       {/* ── Main grid ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-4 min-h-0">
 
         {/* Telemetry gauges */}
         <div className="lg:col-span-2 grid grid-cols-2 gap-4">
           {[
-            { icon: <Thermometer className="w-7 h-7" />, value: `${mTemp.toFixed(1)}°C`, label: 'Core Temp', warn: mTemp > 80, critical: mTemp > 95 },
-            { icon: <Activity className="w-7 h-7" />, value: `${mVib.toFixed(2)} mm/s`, label: 'Vibration', warn: mVib > 6, critical: mVib > 9 },
-            { icon: <Zap className="w-7 h-7" />, value: `${mPower.toFixed(1)} kW`, label: 'Power Draw', warn: mPower < 1 && mPower > 0, critical: mPower === 0 && machine },
-            { icon: <span className="text-2xl font-bold font-mono">{mRpm}</span>, value: null, label: 'Rotor RPM', warn: mRpm < 1200 && mRpm > 0, critical: mRpm === 0 && machine },
+            { icon: <Thermometer className="w-7 h-7" />, value: `${mTemp.toFixed(1)}°C`, label: t('coreTemp'), warn: mTemp > 80, critical: mTemp > 95 },
+            { icon: <Activity className="w-7 h-7" />, value: `${mVib.toFixed(2)} mm/s`, label: t('vibration'), warn: mVib > 6, critical: mVib > 9 },
+            { icon: <Zap className="w-7 h-7" />, value: `${mPower.toFixed(1)} kW`, label: t('powerDraw'), warn: mPower < 1 && mPower > 0, critical: mPower === 0 && machine },
+            { icon: <span className="text-2xl font-bold font-mono">{mRpm}</span>, value: null, label: t('rotorRpm'), warn: mRpm < 1200 && mRpm > 0, critical: mRpm === 0 && machine },
           ].map((g, i) => (
             <div key={i} className={`p-5 rounded-2xl border flex flex-col items-center justify-center text-center ${card}`}>
               <div className={g.critical ? 'text-rose-400' : g.warn ? 'text-amber-400' : 'text-emerald-400'}>
@@ -195,53 +200,49 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, t
         </div>
 
         {/* Right panel: Assigned Jobs + Active Alerts */}
-        <div className="flex flex-col gap-4 min-h-0">
+        <div className="lg:col-span-3 flex flex-col gap-4 min-h-0">
 
           {/* ── Assigned Work Orders from Admin ── */}
-          <div className={`flex-1 rounded-2xl border flex flex-col p-4 ${card}`}>
-            <h2 className={`text-sm font-bold flex items-center gap-2 mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              <UserCheck className="w-4 h-4 text-blue-400" />
-              Assigned Work Orders
-              {assignedJobs.filter(j => !j.resolved).length > 0 && (
-                <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 font-mono">
-                  {assignedJobs.filter(j => !j.resolved).length} OPEN
-                </span>
-              )}
+          <div className={`flex-1 rounded-2xl border p-5 flex flex-col min-h-[300px] overflow-hidden ${card}`}>
+            <h2 className="text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
+              <User className="w-4 h-4 text-blue-500" /> {t('assignedWorkOrders')}
             </h2>
 
-            <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
               {assignedJobs.length === 0 ? (
-                <div className={`py-6 text-center text-xs ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
-                  <UserCheck className="w-6 h-6 mx-auto mb-2 opacity-30" />
-                  No work orders assigned yet.<br/>Admin will dispatch experts here.
+                <div className={`h-full flex items-center justify-center text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                  {t('noWorkOrders')}
                 </div>
               ) : assignedJobs.map(job => (
-                <div key={job.ticketId} className={`p-3 rounded-xl border text-xs transition-all ${
+                <div key={job.ticketId} className={`p-4 rounded-xl border ${
                   job.resolved
                     ? isDark ? 'bg-emerald-950/20 border-emerald-900/40' : 'bg-emerald-50 border-emerald-200'
                     : isDark ? 'bg-blue-950/30 border-blue-800/50' : 'bg-blue-50 border-blue-200'
                 }`}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className={`font-mono font-bold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{job.ticketId}</span>
-                    {job.resolved
-                      ? <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> RESOLVED</span>
-                      : <span className="text-[10px] text-blue-400 font-mono animate-pulse">● IN PROGRESS</span>
-                    }
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-xs font-mono font-bold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{job.ticketId}</span>
                   </div>
-                  <p className={`font-semibold mb-1 ${isDark ? 'text-white' : 'text-slate-800'}`}>{job.expertName}</p>
-                  <p className={`${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{job.expertRole}</p>
-                  {job.notes && <p className={`mt-1 italic ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>"{job.notes}"</p>}
-                  <p className={`mt-1 text-[10px] font-mono ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{job.dispatchedAt}</p>
-
-                  {!job.resolved && (
-                    <button
-                      onClick={() => markResolved(job)}
-                      className="mt-2.5 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-colors"
-                    >
-                      <ClipboardCheck className="w-3.5 h-3.5" />
-                      Mark Issue as Resolved
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-slate-800'}`}>{job.expertName}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-200 text-slate-600'}`}>{job.expertRole}</span>
+                  </div>
+                  {job.notes && <p className={`text-xs italic mb-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>"{job.notes}"</p>}
+                  
+                  <div className="flex items-center gap-2">
+                    {job.resolved ? (
+                      <span className="text-xs font-bold text-emerald-500 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> {t('resolved')}</span>
+                    ) : (
+                      <>
+                        <span className="text-xs font-bold text-amber-500 flex items-center gap-1 animate-pulse"><Activity className="w-3.5 h-3.5" /> {t('inProgress')}</span>
+                        <button
+                          onClick={() => markJobResolved(job.ticketId)}
+                          className="ml-3 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 text-xs font-bold transition-colors"
+                        >
+                          {t('markResolved')}
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -251,11 +252,11 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, t
           <div className={`rounded-2xl border p-4 flex flex-col ${card}`}>
             <h2 className={`text-sm font-bold flex items-center gap-2 mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
               <AlertOctagon className="w-4 h-4 text-rose-400" />
-              Active Alerts
+              {t('activeAlerts')}
             </h2>
             <div className="space-y-2 max-h-36 overflow-y-auto">
               {activeTickets.length === 0 ? (
-                <p className={`text-xs text-center py-2 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>No active alerts.</p>
+                <p className={`text-xs text-center py-2 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{t('noActiveAlerts')}</p>
               ) : activeTickets.map(ticket => (
                 <div key={ticket.ticket_id} className={`p-2.5 rounded-xl border ${isDark ? 'bg-rose-950/20 border-rose-900/40' : 'bg-rose-50 border-rose-200'}`}>
                   <div className="flex justify-between items-center mb-1">
