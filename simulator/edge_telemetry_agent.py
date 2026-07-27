@@ -5,18 +5,27 @@ import threading
 import requests
 import asyncio
 import websockets
+import os
 from datetime import datetime
 
 # ==============================================================
 # CONFIGURATION
 # ==============================================================
-API_URL_INPUT = input("Enter your REST API Gateway URL: ").strip()
-if not API_URL_INPUT.endswith('/telemetry'):
-    API_URL = API_URL_INPUT.rstrip('/') + '/telemetry'
-else:
-    API_URL = API_URL_INPUT
-    
-WS_URL = input("Enter your WebSocket API Gateway URL (or press Enter to skip C2D): ").strip()
+env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'frontend', '.env'))
+API_URL = ""
+WS_URL = ""
+try:
+    with open(env_path, 'r') as f:
+        for line in f:
+            if line.startswith('VITE_API_URL='):
+                API_URL = line.split('=', 1)[1].strip()
+            elif line.startswith('VITE_WS_URL='):
+                WS_URL = line.split('=', 1)[1].strip()
+except Exception as e:
+    print(f"WARNING: Could not read {env_path}. Make sure it exists!")
+
+if not API_URL.endswith('/telemetry') and API_URL:
+    API_URL = API_URL.rstrip('/') + '/telemetry'
 NUM_MACHINES = 25
 POLL_INTERVAL_SECONDS = 10
 

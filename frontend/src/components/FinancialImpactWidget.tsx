@@ -20,33 +20,25 @@ export const FinancialImpactWidget: React.FC<FinancialImpactWidgetProps> = ({ ti
   const [liveSaved, setLiveSaved] = useState({ usd: 0, jpy: 0, inr: 0 });
 
   useEffect(() => {
-    // Calculate every second for live ticker effect on open tickets
-    const interval = setInterval(() => {
+    const calculate = () => {
       let lostUsd = 0;
       let savedUsd = 0;
 
       tickets.forEach(ticket => {
         const createdTime = new Date(ticket.created_at).getTime();
 
-        // ONLY accumulate revenue loss for CRITICAL/ERROR tickets, because WARNING nodes are still producing!
         if (ticket.status === 'OPEN' && (ticket.priority === 'CRITICAL' || ticket.priority === 'P1')) {
-          // Downtime is from created_at until NOW
           const now = Date.now();
           const downMinutes = (now - createdTime) / 1000 / 60;
           lostUsd += downMinutes * COST_PER_MIN_USD;
         } else if (ticket.status === 'RESOLVED' && ticket.resolved_at && (ticket.priority === 'CRITICAL' || ticket.priority === 'P1')) {
-          // Downtime is from created_at until resolved_at
           const resolvedTime = new Date(ticket.resolved_at).getTime();
           let downMinutes = (resolvedTime - createdTime) / 1000 / 60;
           
-          // DEMO OVERRIDE: If the ticket was loaded from an old database session (e.g. > 24 hours old),
-          // artificially cap the downtime at 15 minutes so the Revenue Saved widget still populates impressively during your interviews!
           if (downMinutes > 1440) downMinutes = 15;
 
           lostUsd += downMinutes * COST_PER_MIN_USD;
 
-          // Manual baseline assumed to be 45 minutes (industry average for manual dispatch). 
-          // If we resolved it faster than 45 mins, we saved money!
           if (downMinutes < 45) {
             const savedMinutes = 45 - downMinutes;
             savedUsd += savedMinutes * COST_PER_MIN_USD;
@@ -65,7 +57,13 @@ export const FinancialImpactWidget: React.FC<FinancialImpactWidgetProps> = ({ ti
         jpy: savedUsd * USD_TO_JPY,
         inr: savedUsd * USD_TO_INR
       });
-    }, 1000);
+    };
+
+    // Run immediately so the UI updates instantly when a ticket is resolved
+    calculate();
+
+    // Then run every second for the live ticker effect
+    const interval = setInterval(calculate, 1000);
 
     return () => clearInterval(interval);
   }, [tickets]);
