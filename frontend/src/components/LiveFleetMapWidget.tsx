@@ -25,6 +25,13 @@ export const LiveFleetMapWidget: React.FC<LiveFleetMapWidgetProps> = ({
     );
     if (openTickets.some((t) => t.priority === 'P1' || t.priority === 'CRITICAL')) return 'ERROR';
     if (openTickets.length > 0) return 'WARNING';
+
+    const machine = machines.find(m => m.id === machineId);
+    if (machine) {
+      if (machine.status.includes('CRITICAL') || machine.status.includes('ERROR')) return 'ERROR';
+      if (machine.status.includes('WARNING')) return 'WARNING';
+    }
+    
     return 'HEALTHY';
   };
 

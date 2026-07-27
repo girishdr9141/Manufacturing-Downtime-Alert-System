@@ -1,3 +1,6 @@
+# AWS SAM build artifacts (auto-generated — do not commit)
+.aws-sam/
+
 # AWS IoT Certificates
 simulator/certs/*
 !simulator/certs/.gitkeep
@@ -26,3 +29,8 @@ frontend/dist/
 .env.local
 *.local
 frontend/package-lock.json
+
+# Frontend environment (contains live AWS API keys — never commit!)
+frontend/.env
+frontend/.env.*
+!frontend/.env.example

@@ -1,206 +1,311 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AuthScreen } from './components/AuthScreen';
-import { Header } from './components/Header';
 import { LiveFleetMapWidget } from './components/LiveFleetMapWidget';
 import { SystemHealthWidget } from './components/SystemHealthWidget';
 import { ActiveTicketsWidget } from './components/ActiveTicketsWidget';
 import { C2DCommandPanel } from './components/C2DCommandPanel';
 import { ToastContainer } from './components/ToastContainer';
+import { OperatorDashboard } from './components/OperatorDashboard';
 
 import { Ticket, Machine, ToastMessage, C2DCommandLog } from './types';
-import { INITIAL_MACHINES, INITIAL_TICKETS } from './mockData';
-import { fetchAPI, isDemoUrl } from './api';
 
-const LOCAL_STORAGE_KEY = 'dx_command_center_api_url';
-const POLL_INTERVAL_SECONDS = 30;
+// ─── Environment ─────────────────────────────────────────────────────────────
+const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+const WS_URL  = (import.meta.env.VITE_WS_URL  || '').replace(/\/+$/, '');
 
-// --- Sidebar Navigation Items ---
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function isAnomaly(status: string): boolean {
+  return status.includes('CRITICAL') || status.includes('ERROR') || status.includes('WARNING');
+}
+
+function isError(status: string): boolean {
+  return status.includes('CRITICAL') || status.includes('ERROR');
+}
+
+function makePriority(status: string): 'P1' | 'P2' {
+  return status.includes('CRITICAL') ? 'P1' : 'P2';
+}
+
+function makeRunbook(status: string, temp: number): string {
+  if (status.includes('CRITICAL') || temp > 95) {
+    return '1. IMMEDIATELY isolate machine power.\n2. Check coolant fluid levels and thermal sensor.\n3. Notify supervisor before restarting.';
+  }
+  if (status.includes('ERROR')) {
+    return '1. Check power feed and circuit breakers.\n2. Inspect for physical damage or loose connections.\n3. Run diagnostic self-test before restart.';
+  }
+  return '1. Schedule preventive maintenance within 24 hours.\n2. Monitor temperature trend over next 2 hours.\n3. Alert floor supervisor if status worsens.';
+}
+
+/** Auto-generate a local ticket for a machine in anomaly state. */
+function buildTicket(machine: Machine): Ticket {
+  return {
+    ticket_id:   `INC-${machine.id.slice(-3)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+    machine_id:  machine.id,
+    priority:    makePriority(machine.status),
+    status:      'OPEN',
+    description: `Anomaly detected on ${machine.id}: ${machine.status}. Temp: ${machine.temperature}°C, Vibration: ${machine.vibration} mm/s`,
+    ai_runbook:  makeRunbook(machine.status, machine.temperature),
+    created_at:  new Date().toISOString(),
+  };
+}
+
+// ─── Nav ─────────────────────────────────────────────────────────────────────
 const NAV_ITEMS = [
-  { id: 'dashboard',  label: 'Dashboard',         icon: '⊞' },
-  { id: 'map',        label: 'Live Factory Map',   icon: '📍' },
-  { id: 'tickets',    label: 'IT Tickets',         icon: '🎫' },
-  { id: 'c2d',        label: 'C2D Control',        icon: '⚡' },
-  { id: 'health',     label: 'System Health',      icon: '📊' },
+  { id: 'dashboard', label: 'Dashboard',       icon: '⊞' },
+  { id: 'map',       label: 'Live Factory Map',icon: '📍' },
+  { id: 'tickets',   label: 'IT Tickets',      icon: '🎫' },
+  { id: 'c2d',       label: 'C2D Control',     icon: '⚡' },
+  { id: 'health',    label: 'System Health',   icon: '📊' },
 ];
 
+// ─── App ─────────────────────────────────────────────────────────────────────
 export default function App() {
-  // Always start at the auth screen — no auto-login from localStorage
-  const [apiUrl, setApiUrl] = useState<string | null>(null);
-  const [machines, setMachines] = useState<Machine[]>([]);
-  const [tickets, setTickets] = useState<Ticket[]>(INITIAL_TICKETS);
-  const [selectedMachineId, setSelectedMachineId] = useState<string>('');
-  const [commandLogs, setCommandLogs] = useState<C2DCommandLog[]>([]);
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [isFetchingTickets, setIsFetchingTickets] = useState<boolean>(false);
-  const [isSendingCommand, setIsSendingCommand] = useState<boolean>(false);
-  const [pollSecondsRemaining, setPollSecondsRemaining] = useState<number>(POLL_INTERVAL_SECONDS);
+  const [currentUser,      setCurrentUser]      = useState<any | null>(null);
+  const [userRole,         setUserRole]         = useState<'Admin' | 'Operator'>('Admin');
+  const [assignedMachineId,setAssignedMachineId]= useState<string | null>(null);
 
-  // UI State
-  const [isDark, setIsDark] = useState<boolean>(true);
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
-  const [activeNav, setActiveNav] = useState<string>('dashboard');
+  const [machines,         setMachines]         = useState<Machine[]>([]);
+  const [tickets,          setTickets]          = useState<Ticket[]>([]);
+  const [selectedMachineId,setSelectedMachineId]= useState<string>('');
+  const [commandLogs,      setCommandLogs]      = useState<C2DCommandLog[]>([]);
+  const [toasts,           setToasts]           = useState<ToastMessage[]>([]);
+  const [isSendingCommand, setIsSendingCommand] = useState(false);
+  const [wsConnected,      setWsConnected]      = useState(false);
 
-  const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isDark,      setIsDark]      = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeNav,   setActiveNav]   = useState('dashboard');
 
-  // Apply theme to <html> element
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', isDark);
-  }, [isDark]);
+  const wsRef           = useRef<WebSocket | null>(null);
+  // Track which machine IDs already have an open ticket so we don't duplicate
+  const ticketedMachines = useRef<Set<string>>(new Set());
 
+  // ── Toast ──────────────────────────────────────────────────────────────────
   const addToast = useCallback((type: ToastMessage['type'], title: string, message: string) => {
-    const newToast: ToastMessage = {
-      id: `toast-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      type, title, message,
-      timestamp: new Date().toLocaleTimeString(),
-    };
-    setToasts((prev) => [newToast, ...prev].slice(0, 5));
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== newToast.id));
-    }, 4500);
+    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setToasts(prev => [{ id, type, title, message, timestamp: new Date().toLocaleTimeString() }, ...prev].slice(0, 5));
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
   }, []);
 
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
+  const dismissToast = useCallback((id: string) => setToasts(prev => prev.filter(t => t.id !== id)), []);
 
-  const handleSaveUrl = (url: string) => {
-    // Session-only: do not persist to localStorage so auth screen shows on next visit
-    setApiUrl(url);
-    addToast('success', 'Zero-Trust Gateway Connected', `Endpoint: ${url}`);
+  // ── Auto-generate tickets from machine state ───────────────────────────────
+  const syncTicketsFromMachines = useCallback((currentMachines: Machine[]) => {
+    currentMachines.forEach(machine => {
+      if (isAnomaly(machine.status) && !ticketedMachines.current.has(machine.id)) {
+        ticketedMachines.current.add(machine.id);
+        const newTicket = buildTicket(machine);
+        setTickets(prev => {
+          // Don't add if open ticket for this machine already exists
+          const alreadyOpen = prev.some(t => t.machine_id === machine.id && t.status === 'OPEN');
+          if (alreadyOpen) return prev;
+          return [newTicket, ...prev];
+        });
+        if (isError(machine.status)) {
+          addToast('error', '🚨 Critical Alert!', `${machine.id} is in ${machine.status}. Ticket ${newTicket.ticket_id} created.`);
+        } else {
+          addToast('warning', '⚠️ Warning Alert', `${machine.id} is in ${machine.status}. Ticket ${newTicket.ticket_id} created.`);
+        }
+      }
+      // If machine recovers, clear it from the set so a new ticket can form if it fails again
+      if (!isAnomaly(machine.status)) {
+        ticketedMachines.current.delete(machine.id);
+      }
+    });
+  }, [addToast]);
+
+  // ── Auth ───────────────────────────────────────────────────────────────────
+  const handleLoginSuccess = (user: any, role: string, machineId?: string) => {
+    setCurrentUser(user);
+    setUserRole(role as 'Admin' | 'Operator');
+    if (machineId) setAssignedMachineId(machineId);
+    addToast('success', 'Authentication Successful', `Logged in as ${role}`);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
-    setApiUrl(null);
-    addToast('info', 'Session Ended', 'Please re-enter your API Gateway URL to reconnect.');
+    wsRef.current?.close();
+    setCurrentUser(null);
+    setAssignedMachineId(null);
+    setMachines([]);
+    setTickets([]);
+    ticketedMachines.current.clear();
+    setWsConnected(false);
   };
 
-  const fetchDashboardData = useCallback(async () => {
-    if (!apiUrl) return;
-    setIsFetchingTickets(true);
+  // ── REST initial load (best-effort, silent on fail) ────────────────────────
+  const fetchInitialData = useCallback(async () => {
+    if (!API_URL) return;
     try {
-      // Fetch Tickets
-      const ticketRes = await fetchAPI<any>(apiUrl, '/tickets', { method: 'GET' });
-      let tData = ticketRes.data;
-      if (tData && typeof tData === 'object' && 'tickets' in tData) tData = tData.tickets;
-      if (Array.isArray(tData)) {
-        const formattedTickets: Ticket[] = tData.map((item: any, idx: number) => ({
-          ticket_id: item.ticket_id || item.id || `TCK-${8000 + idx}`,
-          machine_id: item.machine_id || item.machineId || item.MachineID || 'UNKNOWN',
-          priority: item.priority || item.Priority || 'P2',
-          description: item.description || item.Description || item.desc || 'Edge anomaly detected.',
-          ai_runbook: item.ai_runbook || item.AIRunbook || item.runbook || '1. Inspect node telemetry.',
-          status: item.status || item.Status || 'OPEN',
-          created_at: item.created_at || item.CreatedAt || item.createdAt || new Date().toISOString(),
-          telemetry_snapshot: item.telemetry_snapshot,
-        }));
-        setTickets(formattedTickets);
-      }
-
-      // Fetch Machines
-      const machineRes = await fetchAPI<any>(apiUrl, '/machines', { method: 'GET' });
-      let mData = machineRes.data;
-      if (mData && typeof mData === 'object' && 'machines' in mData) mData = mData.machines;
-      if (Array.isArray(mData) && mData.length > 0) {
+      const res = await fetch(`${API_URL}/data`, {
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      });
+      if (!res.ok) return;
+      const raw = await res.json();
+      const parsed = raw.body ? JSON.parse(raw.body) : raw;
+      const mData: Machine[] = (parsed.machines || []).map((m: any) => ({ ...m, id: m.id || m.MachineID }));
+      const tData: Ticket[]  = (parsed.tickets  || []).map((t: any) => ({ ...t }));
+      if (mData.length > 0) {
         setMachines(mData);
-        // Default select the first machine if none selected
-        setSelectedMachineId((prev) => prev || mData[0].id);
+        setSelectedMachineId(prev => prev || mData[0].id);
+        syncTicketsFromMachines(mData);
       }
-
-      setPollSecondsRemaining(POLL_INTERVAL_SECONDS);
-    } catch (err: any) {
-      addToast('error', 'Dashboard Sync Error', `Failed to reach API: ${err.message || 'Network error'}`);
-    } finally {
-      setIsFetchingTickets(false);
+      if (tData.length > 0) {
+        setTickets(prev => {
+          const existingIds = new Set(prev.map(t => t.ticket_id));
+          const newOnes = tData.filter((t: Ticket) => !existingIds.has(t.ticket_id));
+          return [...prev, ...newOnes];
+        });
+      }
+    } catch {
+      // Silently ignore — WebSocket data will hydrate the UI
     }
-  }, [apiUrl, addToast]);
+  }, [syncTicketsFromMachines]);
 
+  // ── WebSocket (stable — no dependency on fetchInitialData) ────────────────
   useEffect(() => {
-    if (!apiUrl) return;
-    fetchDashboardData();
-    if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
-    pollTimerRef.current = setInterval(fetchDashboardData, POLL_INTERVAL_SECONDS * 1000);
-    countdownTimerRef.current = setInterval(() => {
-      setPollSecondsRemaining((prev) => (prev <= 1 ? POLL_INTERVAL_SECONDS : prev - 1));
-    }, 1000);
-    return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
-    };
-  }, [apiUrl, fetchDashboardData]);
+    if (!currentUser) return;
 
+    fetchInitialData();
+
+    if (!WS_URL) return;
+
+    const url = `${WS_URL}?role=${userRole}${assignedMachineId ? `&machine_id=${assignedMachineId}` : ''}`;
+    const ws  = new WebSocket(url);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setWsConnected(true);
+      addToast('success', 'WebSocket Connected', 'Real-time bi-directional telemetry active.');
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+
+        if (payload.type === 'TELEMETRY_UPDATE') {
+          const d = payload.data;
+          const machineId = d.machine_id || d.id;
+          if (!machineId) return;
+
+          setMachines(prev => {
+            const updated = prev.find(m => m.id === machineId)
+              ? prev.map(m => m.id === machineId ? { ...m, ...d, id: machineId, status: d.status || m.status } : m)
+              : [...prev, { ...d, id: machineId }];
+
+            // Auto-generate tickets from updated list (next tick)
+            setTimeout(() => syncTicketsFromMachines(updated), 0);
+            return updated;
+          });
+
+          if (!selectedMachineId) setSelectedMachineId(machineId);
+        }
+
+        if (payload.type === 'C2D_COMMAND') {
+          addToast('warning', 'Admin Command Received!', `EXECUTE: ${payload.command}`);
+          if (payload.command === 'STOP') {
+            setMachines(prev => prev.map(m =>
+              m.id === payload.machine_id ? { ...m, status: 'OFFLINE' as any, power_kw: 0, rpm: 0 } : m
+            ));
+          }
+        }
+      } catch (e) {
+        console.error('WS parse error', e);
+      }
+    };
+
+    ws.onclose = () => {
+      setWsConnected(false);
+      addToast('error', 'WebSocket Disconnected', 'Connection lost to edge network.');
+    };
+
+    return () => ws.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, userRole, assignedMachineId]);
+
+  // ── Resolve ticket ─────────────────────────────────────────────────────────
   const handleResolveTicket = async (ticketId: string) => {
-    if (!apiUrl) return;
-    try {
-      await fetchAPI(apiUrl, '/tickets', { method: 'PUT', body: JSON.stringify({ ticket_id: ticketId, action: 'RESOLVE' }) });
-      addToast('success', 'Ticket Resolved', `Ticket ${ticketId} marked RESOLVED.`);
-      setTickets((prev) => prev.map((t) => (t.ticket_id === ticketId ? { ...t, status: 'RESOLVED' } : t)));
-      await fetchDashboardData();
-    } catch (err: any) {
-      addToast('error', 'Resolve Ticket Failed', err.message || 'Error executing PUT /tickets');
+    // Optimistic local update — always works
+    setTickets(prev => prev.map(t => t.ticket_id === ticketId ? { ...t, status: 'RESOLVED' } : t));
+    // Find the machine and allow it to re-ticket if it's still broken
+    const ticket = tickets.find(t => t.ticket_id === ticketId);
+    if (ticket) ticketedMachines.current.delete(ticket.machine_id);
+    addToast('success', 'Ticket Resolved', `Ticket ${ticketId} marked as RESOLVED.`);
+
+    // Also try to persist to cloud (fire-and-forget)
+    if (API_URL) {
+      fetch(`${API_URL}/tickets`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticket_id: ticketId, action: 'RESOLVE' }),
+      }).catch(() => {});
     }
   };
 
+  // ── Send C2D command ───────────────────────────────────────────────────────
   const handleSendCommand = async (machineId: string, command: 'START' | 'STOP' | 'PUSH_OTA', extraPayload?: any) => {
-    if (!apiUrl) return;
     setIsSendingCommand(true);
     const startTime = Date.now();
+    const payload = { machine_id: machineId, command, ...(extraPayload || {}) };
     try {
-      const payload = { machine_id: machineId, command, ...(extraPayload || {}) };
-      const response = await fetchAPI(apiUrl, '/commands', { method: 'POST', body: JSON.stringify(payload) });
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify(payload));
+      } else if (API_URL) {
+        await fetch(`${API_URL}/commands`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      }
       const latency = Date.now() - startTime;
-      const newLog: C2DCommandLog = {
+      const log: C2DCommandLog = {
         id: `CMD-${Math.floor(1000 + Math.random() * 9000)}`,
         machine_id: machineId, command, payload,
         timestamp: new Date().toLocaleTimeString(),
-        status: 'SUCCESS',
-        httpStatus: response.rawStatus || 200,
-        responseData: response.data,
+        status: 'SUCCESS', httpStatus: 200,
       };
-      setCommandLogs((prev) => [newLog, ...prev]);
-      addToast('success', `C2D Command Dispatched (${latency}ms)`, `Sent '${command}' to ${machineId}.`);
-      if (command === 'STOP' || command === 'START') {
-        setMachines((prev) => prev.map((m) => (m.id === machineId ? { ...m, status: 'HEALTHY', temperature: command === 'STOP' ? 45.0 : m.temperature } : m)));
-      }
+      setCommandLogs(prev => [log, ...prev]);
+      addToast('success', `C2D Command Sent (${latency}ms)`, `Dispatched '${command}' to ${machineId}.`);
     } catch (err: any) {
-      addToast('error', 'C2D Dispatch Failed', err.message || 'Error executing POST /commands');
+      addToast('error', 'C2D Dispatch Failed', err.message);
     } finally {
       setIsSendingCommand(false);
     }
   };
 
-  if (!apiUrl) {
+  // ── Manual refresh ─────────────────────────────────────────────────────────
+  const handleRefresh = useCallback(() => fetchInitialData(), [fetchInitialData]);
+
+  // ── Render: Auth ───────────────────────────────────────────────────────────
+  if (!currentUser) {
     return (
       <>
-        <AuthScreen onSaveUrl={handleSaveUrl} isDark={isDark} onToggleTheme={() => setIsDark(!isDark)} />
+        <AuthScreen onLoginSuccess={handleLoginSuccess} isDark={isDark} onToggleTheme={() => setIsDark(!isDark)} />
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       </>
     );
   }
 
-  const isDemo = isDemoUrl(apiUrl);
-  const openTickets = tickets.filter(t => t.status !== 'RESOLVED').length;
-  const criticalMachines = machines.filter(m => m.status === 'ERROR').length;
+  // ── Render: Operator ───────────────────────────────────────────────────────
+  if (userRole === 'Operator') {
+    const assignedMachine = machines.find(m => m.id === assignedMachineId) || null;
+    return (
+      <div className={`h-screen overflow-hidden ${isDark ? 'bg-slate-950' : 'bg-slate-100'} p-4 sm:p-6`}>
+        <OperatorDashboard machine={assignedMachine} tickets={tickets} isDark={isDark} onLogout={handleLogout} />
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      </div>
+    );
+  }
+
+  // ── Render: Admin ──────────────────────────────────────────────────────────
+  const openTickets      = tickets.filter(t => t.status !== 'RESOLVED').length;
 
   return (
     <div className={`flex h-screen overflow-hidden font-sans transition-colors duration-300 ${isDark ? 'bg-slate-900 text-slate-100' : 'bg-slate-100 text-slate-900'}`}>
 
-      {/* ===== SIDEBAR ===== */}
-      <aside
-        className={`
-          flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out
-          ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}
-          border-r
-          ${sidebarOpen ? 'w-60' : 'w-16'}
-        `}
-      >
-        {/* Sidebar Logo */}
+      {/* ── Sidebar ── */}
+      <aside className={`flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out border-r ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'} ${sidebarOpen ? 'w-60' : 'w-16'}`}>
         <div className={`flex items-center gap-3 px-4 py-5 border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-            DX
-          </div>
+          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">DX</div>
           {sidebarOpen && (
             <div className="overflow-hidden">
               <p className={`font-bold text-sm leading-tight ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>Manufacturing DX</p>
@@ -209,225 +314,115 @@ export default function App() {
           )}
         </div>
 
-        {/* Nav Items */}
         <nav className="flex-1 overflow-y-auto py-4 space-y-1 px-2">
-          {sidebarOpen && (
-            <p className={`text-xs font-semibold uppercase tracking-widest px-2 mb-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-              WORKSPACE
-            </p>
-          )}
-          {NAV_ITEMS.map((item) => (
+          {sidebarOpen && <p className={`text-xs font-semibold uppercase tracking-widest px-2 mb-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>WORKSPACE</p>}
+          {NAV_ITEMS.map(item => (
             <button
               key={item.id}
               onClick={() => setActiveNav(item.id)}
-              className={`
-                w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left
-                ${activeNav === item.id
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left ${
+                activeNav === item.id
                   ? 'bg-blue-600 text-white shadow-md'
-                  : isDark
-                    ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                }
-              `}
+                  : isDark ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-100' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
             >
               <span className="text-base flex-shrink-0">{item.icon}</span>
               {sidebarOpen && <span className="truncate">{item.label}</span>}
-              {sidebarOpen && item.id === 'tickets' && openTickets > 0 && (
-                <span className="ml-auto bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
-                  {openTickets}
-                </span>
-              )}
             </button>
           ))}
         </nav>
 
-        {/* User Info at Bottom */}
         <div className={`border-t ${isDark ? 'border-slate-800' : 'border-slate-200'} p-3`}>
           {sidebarOpen ? (
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                G
+              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">A</div>
+              <div className="overflow-hidden flex-1">
+                <p className={`text-xs font-semibold truncate ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{currentUser.email}</p>
+                <p className="text-xs text-slate-500 truncate">Administrator</p>
               </div>
-              <div className="overflow-hidden">
-                <p className={`text-xs font-semibold truncate ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>Girish D R</p>
-                <p className="text-xs text-slate-500 truncate">Admin</p>
-              </div>
-              <button
-                onClick={handleLogout}
-                title="Sign Out"
-                className="ml-auto text-slate-500 hover:text-red-400 transition-colors text-xs"
-              >
-                ⇥
+              <button onClick={handleLogout} className="ml-auto flex items-center gap-1 bg-slate-800/50 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 px-2 py-1.5 rounded-lg transition-colors text-xs font-semibold border border-transparent hover:border-rose-500/20">
+                ⇥ Logout
               </button>
             </div>
           ) : (
-            <button
-              onClick={handleLogout}
-              title="Sign Out"
-              className="w-full flex justify-center text-slate-500 hover:text-red-400 transition-colors"
-            >
-              ⇥
-            </button>
+            <button onClick={handleLogout} className="w-full flex justify-center text-slate-500 hover:text-red-400 transition-colors">⇥</button>
           )}
         </div>
       </aside>
 
-      {/* ===== MAIN CONTENT ===== */}
+      {/* ── Main ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
-
-        {/* ===== TOP NAV BAR ===== */}
         <header className={`flex-shrink-0 flex items-center gap-4 px-4 py-3 border-b ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
-          {/* Hamburger to toggle sidebar */}
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-100 text-slate-600'}`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-100 text-slate-600'}`}>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
-
-          {/* Page Title */}
           <div>
             <p className={`text-sm font-bold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
               {NAV_ITEMS.find(n => n.id === activeNav)?.icon} {NAV_ITEMS.find(n => n.id === activeNav)?.label || 'Dashboard'}
             </p>
             <p className="text-xs text-slate-500">Zero-Trust Enterprise Environment</p>
           </div>
-
-          {/* Stats Pills */}
-          <div className="ml-4 hidden sm:flex items-center gap-3">
-            <span className={`text-xs px-3 py-1 rounded-full font-medium ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
-              🎫 {openTickets} Open
+          <div className="ml-auto flex items-center gap-3">
+            <span className={`text-xs px-2 py-1 rounded-full font-medium ${wsConnected ? 'bg-emerald-500/20 text-emerald-400 animate-pulse' : 'bg-red-500/20 text-red-400'}`}>
+              {wsConnected ? 'WS CONNECTED' : 'WS OFFLINE'}
             </span>
-            {criticalMachines > 0 && (
-              <span className="text-xs px-3 py-1 rounded-full font-medium bg-red-500/20 text-red-400">
-                ⚠️ {criticalMachines} Critical
-              </span>
-            )}
-          </div>
-
-          <div className="ml-auto flex items-center gap-2">
-            {/* Dark / Light Toggle */}
-            <button
-              onClick={() => setIsDark(!isDark)}
-              className={`relative w-12 h-6 rounded-full transition-colors duration-300 flex items-center ${isDark ? 'bg-blue-600' : 'bg-slate-300'}`}
-              title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            >
-              <span
-                className={`absolute w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-300 flex items-center justify-center text-xs ${isDark ? 'translate-x-6' : 'translate-x-0.5'}`}
-              >
+            <button onClick={() => setIsDark(!isDark)} className={`relative w-12 h-6 rounded-full transition-colors duration-300 flex items-center ${isDark ? 'bg-blue-600' : 'bg-slate-300'}`}>
+              <span className={`absolute w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-300 flex items-center justify-center text-xs ${isDark ? 'translate-x-6' : 'translate-x-0.5'}`}>
                 {isDark ? '🌙' : '☀️'}
               </span>
             </button>
-
-            {/* Export CSV */}
-            <button
-              onClick={() => window.open(`${apiUrl}/export`, '_blank')}
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
-            >
-              📥 Export CSV
-            </button>
-
-            {/* Refresh + poll indicator */}
-            <button
-              onClick={fetchDashboardData}
-              disabled={isFetchingTickets}
-              className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-colors ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
-            >
-              <span className={isFetchingTickets ? 'animate-spin' : ''}>↻</span>
-              <span className="hidden sm:inline">{isFetchingTickets ? 'Syncing...' : `${pollSecondsRemaining}s`}</span>
-            </button>
-
-            {isDemo && (
-              <span className="text-xs px-2 py-1 rounded-full bg-yellow-500/20 text-yellow-400 font-medium">
-                DEMO
-              </span>
-            )}
           </div>
         </header>
 
-        {/* ===== SCROLLABLE MAIN CONTENT ===== */}
         <main className={`flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 ${isDark ? 'bg-slate-900' : 'bg-slate-100'}`}>
-
-          {/* Welcome Banner */}
+          {/* Overview bar */}
           <div className={`rounded-xl p-5 flex items-center justify-between ${isDark ? 'bg-slate-800/60 border border-slate-700' : 'bg-white border border-slate-200 shadow-sm'}`}>
             <div>
-              <h1 className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
-                Welcome back, Girish 👋
-              </h1>
+              <h1 className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>Admin Operations Overview</h1>
               <p className={`text-sm mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                Here's your factory floor overview
+                {wsConnected ? 'Live WebSocket Stream Active' : 'WebSocket Offline — Waiting to reconnect'}
               </p>
             </div>
-            <div className="hidden sm:flex gap-4">
+            <div className="hidden sm:flex gap-6">
               <div className="text-center">
                 <p className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>{machines.length}</p>
-                <p className="text-xs text-slate-500">Machines</p>
+                <p className="text-xs text-slate-500">Live Nodes</p>
               </div>
               <div className="text-center">
                 <p className="text-2xl font-bold text-red-400">{openTickets}</p>
                 <p className="text-xs text-slate-500">Open Tickets</p>
               </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-emerald-400">{machines.filter(m => m.status === 'HEALTHY').length}</p>
-                <p className="text-xs text-slate-500">Healthy</p>
-              </div>
             </div>
           </div>
 
-          {/* Show all panels on Dashboard; filter by activeNav on specific sections */}
           {(activeNav === 'dashboard' || activeNav === 'map') && (
             <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
-              <LiveFleetMapWidget
-                machines={machines}
-                tickets={tickets}
-                selectedMachineId={selectedMachineId}
-                onSelectMachine={(id) => setSelectedMachineId(id)}
-                isDark={isDark}
-              />
+              <LiveFleetMapWidget machines={machines} tickets={tickets} selectedMachineId={selectedMachineId} onSelectMachine={setSelectedMachineId} isDark={isDark} />
             </div>
           )}
-
           {(activeNav === 'dashboard' || activeNav === 'health') && (
             <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
               <SystemHealthWidget machines={machines} tickets={tickets} isDark={isDark} />
             </div>
           )}
-
           {(activeNav === 'dashboard' || activeNav === 'tickets') && (
             <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
               <ActiveTicketsWidget
                 tickets={tickets}
                 onResolveTicket={handleResolveTicket}
-                onRefresh={fetchDashboardData}
-                isLoading={isFetchingTickets}
-                onSelectMachine={(id) => setSelectedMachineId(id)}
-                pollSecondsRemaining={pollSecondsRemaining}
+                onRefresh={handleRefresh}
+                isLoading={false}
+                onSelectMachine={setSelectedMachineId}
+                pollSecondsRemaining={0}
                 isDark={isDark}
               />
             </div>
           )}
-
           {(activeNav === 'dashboard' || activeNav === 'c2d') && (
             <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
-              <C2DCommandPanel
-                machines={machines}
-                selectedMachineId={selectedMachineId}
-                onSelectMachine={(id) => setSelectedMachineId(id)}
-                onSendCommand={handleSendCommand}
-                commandLogs={commandLogs}
-                isSending={isSendingCommand}
-                isDark={isDark}
-              />
+              <C2DCommandPanel machines={machines} selectedMachineId={selectedMachineId} onSelectMachine={setSelectedMachineId} onSendCommand={handleSendCommand} commandLogs={commandLogs} isSending={isSendingCommand} isDark={isDark} />
             </div>
           )}
-
-          {/* Footer */}
-          <p className={`text-center text-xs pb-4 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
-            Enterprise DX Command Center • Zero-Trust Edge Mesh • AWS Serverless
-          </p>
-
         </main>
       </div>
 

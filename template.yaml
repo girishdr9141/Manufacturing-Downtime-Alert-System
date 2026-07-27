@@ -1,0 +1,282 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Manufacturing DX Enterprise Backend
+  Includes Cognito Auth, DynamoDB, REST API, and WebSocket API for real-time bi-directional C2D communication.
+
+Globals:
+  Function:
+    Timeout: 10
+    Runtime: python3.9
+    MemorySize: 256
+    Environment:
+      Variables:
+        MACHINES_TABLE: !Ref MfgMachinesTable
+        TICKETS_TABLE: !Ref MfgTicketsTable
+        HISTORY_TABLE: !Ref MfgTelemetryHistoryTable
+        CONNECTIONS_TABLE: !Ref MfgConnectionsTable
+        AUDIT_TABLE: !Ref MfgAuditLogsTable
+
+Resources:
+  # ==========================================
+  # 1. DATABASE (DynamoDB)
+  # ==========================================
+  MfgMachinesTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      PrimaryKey:
+        Name: MachineID
+        Type: String
+
+  MfgTicketsTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      PrimaryKey:
+        Name: TicketID
+        Type: String
+
+  MfgAuditLogsTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      PrimaryKey:
+        Name: Timestamp
+        Type: String
+
+  MfgTelemetryHistoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: MachineID
+          AttributeType: S
+        - AttributeName: Timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: MachineID
+          KeyType: HASH
+        - AttributeName: Timestamp
+          KeyType: RANGE
+
+  MfgConnectionsTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      PrimaryKey:
+        Name: ConnectionId
+        Type: String
+
+  # ==========================================
+  # 2. AUTHENTICATION (AWS Cognito)
+  # ==========================================
+  MfgUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: MfgEnterpriseUsers
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: role
+          AttributeDataType: String
+          Mutable: true
+        - Name: machine_id
+          AttributeDataType: String
+          Mutable: true
+
+  MfgUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: MfgFrontendClient
+      UserPoolId: !Ref MfgUserPool
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      PreventUserExistenceErrors: ENABLED
+
+  # ==========================================
+  # 3. WEBSOCKET API
+  # ==========================================
+  MfgWebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: MfgEnterpriseWebSocket
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: "$request.body.action"
+
+  # ==========================================
+  # 4. LAMBDA FUNCTIONS
+  # ==========================================
+  
+  # --- REST: Telemetry Ingestion ---
+  IngestTelemetryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/
+      Handler: api_ingest.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref MfgMachinesTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref MfgTicketsTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref MfgTelemetryHistoryTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref MfgConnectionsTable }
+        - Statement:
+            - Effect: Allow
+              Action:
+                - "execute-api:ManageConnections"
+              Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${MfgWebSocketApi}/*"
+      Environment:
+        Variables:
+          WS_ENDPOINT: !Sub "https://${MfgWebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /telemetry
+            Method: post
+
+  # --- REST: Fetch Dashboard Data ---
+  FetchDataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/
+      Handler: api_fetch.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy: { TableName: !Ref MfgMachinesTable }
+        - DynamoDBReadPolicy: { TableName: !Ref MfgTicketsTable }
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /data
+            Method: get
+
+  # --- WEBSOCKET: Connect ---
+  WsConnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/
+      Handler: ws_connect.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref MfgConnectionsTable }
+
+  # --- WEBSOCKET: Disconnect ---
+  WsDisconnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/
+      Handler: ws_disconnect.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref MfgConnectionsTable }
+
+  # --- WEBSOCKET: Command Router ---
+  WsCommandFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/
+      Handler: ws_command.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref MfgConnectionsTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref MfgAuditLogsTable }
+        - Statement:
+            - Effect: Allow
+              Action:
+                - "execute-api:ManageConnections"
+              Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${MfgWebSocketApi}/*"
+
+  # ==========================================
+  # 5. WEBSOCKET INTEGRATIONS & ROUTES
+  # ==========================================
+  WsConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref MfgWebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WsConnectFunction.Arn}/invocations"
+  WsConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref MfgWebSocketApi
+      RouteKey: "$connect"
+      Target: !Join ['/', ['integrations', !Ref WsConnectIntegration]]
+  WsConnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref WsConnectFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+
+  WsDisconnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref MfgWebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WsDisconnectFunction.Arn}/invocations"
+  WsDisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref MfgWebSocketApi
+      RouteKey: "$disconnect"
+      Target: !Join ['/', ['integrations', !Ref WsDisconnectIntegration]]
+  WsDisconnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref WsDisconnectFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+
+  WsCommandIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref MfgWebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WsCommandFunction.Arn}/invocations"
+  WsCommandRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref MfgWebSocketApi
+      RouteKey: "$default"
+      Target: !Join ['/', ['integrations', !Ref WsCommandIntegration]]
+  WsCommandPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref WsCommandFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+
+  MfgWebSocketDeployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+      - WsConnectRoute
+      - WsDisconnectRoute
+      - WsCommandRoute
+    Properties:
+      ApiId: !Ref MfgWebSocketApi
+      
+  MfgWebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref MfgWebSocketApi
+      DeploymentId: !Ref MfgWebSocketDeployment
+      StageName: Prod
+
+Outputs:
+  RestApiUrl:
+    Description: "API Gateway endpoint URL for Prod stage"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  WebSocketUri:
+    Description: "WebSocket API endpoint URL"
+    Value: !Sub "wss://${MfgWebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  CognitoUserPoolId:
+    Description: "Cognito User Pool ID"
+    Value: !Ref MfgUserPool
+  CognitoClientId:
+    Description: "Cognito App Client ID"
+    Value: !Ref MfgUserPoolClient

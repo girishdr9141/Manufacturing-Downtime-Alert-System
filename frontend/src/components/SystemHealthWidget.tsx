@@ -18,9 +18,17 @@ export const SystemHealthWidget: React.FC<SystemHealthWidgetProps> = ({ machines
 
   machines.forEach((m) => {
     const mOpen = openTickets.filter((t) => t.machine_id === m.id);
-    if (mOpen.some((t) => t.priority === 'P1' || t.priority === 'CRITICAL')) errorCount++;
-    else if (mOpen.length > 0) warningCount++;
-    else healthyCount++;
+    if (mOpen.some((t) => t.priority === 'P1' || t.priority === 'CRITICAL')) {
+      errorCount++;
+    } else if (mOpen.length > 0) {
+      warningCount++;
+    } else if (m.status.includes('CRITICAL') || m.status.includes('ERROR')) {
+      errorCount++;
+    } else if (m.status.includes('WARNING')) {
+      warningCount++;
+    } else {
+      healthyCount++;
+    }
   });
 
   const chartData = [
