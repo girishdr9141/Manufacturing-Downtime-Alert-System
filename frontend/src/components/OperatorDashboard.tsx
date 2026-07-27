@@ -188,8 +188,8 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, t
             ID: {machine?.id || '---'} · {machine?.location || '---'}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setLang(lang === 'en' ? 'ja' : 'en')} className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors ${isDark ? 'border-slate-700 hover:bg-slate-800 text-slate-300' : 'border-slate-300 hover:bg-slate-200 text-slate-700'}`}>
+        <div className="flex flex-wrap items-center gap-2 md:gap-3">
+          <button onClick={() => setLang(lang === 'en' ? 'ja' : 'en')} className={`px-2 md:px-3 py-1 rounded-full text-xs font-bold border transition-colors ${isDark ? 'border-slate-700 hover:bg-slate-800 text-slate-300' : 'border-slate-300 hover:bg-slate-200 text-slate-700'}`}>
             {lang === 'en' ? 'EN' : 'JA'}
           </button>
           <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-2 text-xs font-bold font-mono ${getStatusGlow(mStatus)}`}>
@@ -197,7 +197,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, t
             {mStatus}
           </div>
           
-          <button onClick={onToggleTheme} className={`relative w-12 h-6 rounded-full transition-colors duration-300 flex items-center ${isDark ? 'bg-blue-600' : 'bg-slate-300'}`}>
+          <button onClick={onToggleTheme} className={`hidden sm:flex relative w-12 h-6 rounded-full transition-colors duration-300 items-center ${isDark ? 'bg-blue-600' : 'bg-slate-300'}`}>
             <span className={`absolute w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-300 flex items-center justify-center text-xs ${isDark ? 'translate-x-6' : 'translate-x-0.5'}`}>
               {isDark ? '🌙' : '☀️'}
             </span>
@@ -214,7 +214,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, t
 
         {/* Telemetry gauges and Predictive Widget */}
         <div className="lg:col-span-2 flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3 md:gap-4">
           {[
             { icon: <Thermometer className="w-7 h-7" />, value: `${mTemp.toFixed(1)}°C`, label: t('coreTemp'), warn: mTemp > 80, critical: mTemp > 95 },
             { icon: <Activity className="w-7 h-7" />, value: `${mVib.toFixed(2)} mm/s`, label: t('vibration'), warn: mVib > 6, critical: mVib > 9 },

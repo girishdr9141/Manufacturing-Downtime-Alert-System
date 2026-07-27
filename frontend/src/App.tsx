@@ -110,6 +110,13 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeNav,   setActiveNav]   = useState('dashboard');
 
+  // Auto-close sidebar on mobile load
+  useEffect(() => {
+    if (window.innerWidth < 640) {
+      setSidebarOpen(false);
+    }
+  }, []);
+
   const wsRef           = useRef<WebSocket | null>(null);
   // Track which machine IDs already have an open ticket so we don't duplicate
   const ticketedMachines = useRef<Set<string>>(new Set());
@@ -404,8 +411,16 @@ export default function App() {
   return (
     <div key="admin-view" className={`h-screen flex overflow-hidden font-sans transition-colors duration-500 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
 
+      {/* Mobile Sidebar Backdrop */}
+      {sidebarOpen && (
+        <div 
+          className="sm:hidden fixed inset-0 z-30 bg-black/50 backdrop-blur-sm transition-opacity" 
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* ── Sidebar ── */}
-      <aside className={`flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out border-r ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'} ${sidebarOpen ? 'w-60' : 'w-16'}`}>
+      <aside className={`absolute z-40 h-full sm:relative flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out border-r ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'} ${sidebarOpen ? 'w-60 translate-x-0' : 'w-60 -translate-x-full sm:w-16 sm:translate-x-0'}`}>
         <div className={`flex items-center gap-3 px-4 py-5 border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">DX</div>
           {sidebarOpen && (
@@ -421,7 +436,10 @@ export default function App() {
           {NAV_ITEMS.map(item => (
             <button
               key={item.id}
-              onClick={() => setActiveNav(item.id)}
+              onClick={() => {
+                setActiveNav(item.id);
+                if (window.innerWidth < 640) setSidebarOpen(false);
+              }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left ${
                 activeNav === item.id
                   ? 'bg-blue-600 text-white shadow-md'
@@ -466,14 +484,14 @@ export default function App() {
             </p>
             <p className="text-xs text-slate-500">{t('zeroTrust')}</p>
           </div>
-          <div className="ml-auto flex items-center gap-3">
-            <button onClick={() => setLang(lang === 'en' ? 'ja' : 'en')} className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors ${isDark ? 'border-slate-700 hover:bg-slate-800 text-slate-300' : 'border-slate-300 hover:bg-slate-200 text-slate-700'}`}>
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            <button onClick={() => setLang(lang === 'en' ? 'ja' : 'en')} className={`px-2 sm:px-3 py-1 rounded-full text-xs font-bold border transition-colors ${isDark ? 'border-slate-700 hover:bg-slate-800 text-slate-300' : 'border-slate-300 hover:bg-slate-200 text-slate-700'}`}>
               {lang === 'en' ? 'EN' : 'JA'}
             </button>
             <span className={`text-xs px-2 py-1 rounded-full font-medium ${wsConnected ? 'bg-emerald-500/20 text-emerald-400 animate-pulse' : 'bg-red-500/20 text-red-400'}`}>
               {wsConnected ? t('wsConnected') : t('wsOffline')}
             </span>
-            <button onClick={() => setIsDark(!isDark)} className={`relative w-12 h-6 rounded-full transition-colors duration-300 flex items-center ${isDark ? 'bg-blue-600' : 'bg-slate-300'}`}>
+            <button onClick={() => setIsDark(!isDark)} className={`hidden sm:flex relative w-12 h-6 rounded-full transition-colors duration-300 items-center ${isDark ? 'bg-blue-600' : 'bg-slate-300'}`}>
               <span className={`absolute w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-300 flex items-center justify-center text-xs ${isDark ? 'translate-x-6' : 'translate-x-0.5'}`}>
                 {isDark ? '🌙' : '☀️'}
               </span>
@@ -485,12 +503,12 @@ export default function App() {
           {/* Overview bar */}
           <div className={`rounded-xl p-5 flex items-center justify-between ${isDark ? 'bg-slate-800/60 border border-slate-700' : 'bg-white border border-slate-200 shadow-sm'}`}>
             <div>
-              <h1 className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>{t('adminOverview')}</h1>
-              <p className={`text-sm mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              <h1 className={`text-lg sm:text-xl font-bold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>{t('adminOverview')}</h1>
+              <p className={`text-xs sm:text-sm mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 {wsConnected ? t('wsConnected') : t('wsOffline')}
               </p>
             </div>
-            <div className="hidden sm:flex gap-6">
+            <div className="flex gap-4 sm:gap-6">
               <div className="text-center">
                 <p className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>{machines.length}</p>
                 <p className="text-xs text-slate-500">{t('liveNodes')}</p>
