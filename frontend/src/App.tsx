@@ -15,25 +15,55 @@ const WS_URL  = (import.meta.env.VITE_WS_URL  || '').replace(/\/+$/, '');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function isAnomaly(status: string): boolean {
-  return status.includes('CRITICAL') || status.includes('ERROR') || status.includes('WARNING');
+  return (
+    status.includes('CRITICAL') ||
+    status.includes('ERROR') ||
+    status.includes('WARNING') ||
+    status.includes('PREDICTIVE') ||
+    status.includes('MAINTENANCE')
+  );
 }
 
 function isError(status: string): boolean {
   return status.includes('CRITICAL') || status.includes('ERROR');
 }
 
-function makePriority(status: string): 'P1' | 'P2' {
-  return status.includes('CRITICAL') ? 'P1' : 'P2';
+function makePriority(status: string): 'P1' | 'P2' | 'P3' {
+  if (status.includes('CRITICAL') || status.includes('ERROR')) return 'P1';
+  if (status.includes('WARNING')) return 'P2';
+  return 'P3';
+}
+
+function makeDescription(machineId: string, status: string, temp: number, vibration: number): string {
+  if (status.includes('OVERHEAT'))     return `CRITICAL OVERHEAT on ${machineId}: Temperature ${temp}°C exceeds 95°C safety threshold. Immediate shutdown required.`;
+  if (status.includes('POWER_LOSS'))   return `POWER LOSS on ${machineId}: Machine has lost primary power supply. RPM and output are zero.`;
+  if (status.includes('SENSOR'))       return `SENSOR FAILURE on ${machineId}: Vibration sensor reading 0.0 mm/s — hardware sensor unresponsive or disconnected.`;
+  if (status.includes('COMM_TIMEOUT')) return `COMMUNICATION TIMEOUT on ${machineId}: Edge node stopped responding to API gateway. Power draw critically low (${temp}°C).`;
+  if (status.includes('HIGH_VIB'))     return `HIGH VIBRATION WARNING on ${machineId}: Vibration at ${vibration} mm/s exceeds 8.0 mm/s safety limit. Risk of bearing damage.`;
+  if (status.includes('COOLANT'))      return `COOLANT TEMPERATURE WARNING on ${machineId}: Coolant temperature ${temp}°C approaching danger zone. Check coolant pump.`;
+  if (status.includes('BEARING'))      return `BEARING WEAR WARNING on ${machineId}: Anomalous vibration (${vibration} mm/s) with sluggish RPM detected. Schedule bearing inspection.`;
+  if (status.includes('MAINTENANCE'))  return `PREDICTIVE MAINTENANCE DUE on ${machineId}: Temp ${temp}°C, vibration ${vibration} mm/s trending upward. Maintenance required within 24h.`;
+  return `Anomaly detected on ${machineId}: ${status}. Temp: ${temp}°C, Vibration: ${vibration} mm/s.`;
 }
 
 function makeRunbook(status: string, temp: number): string {
-  if (status.includes('CRITICAL') || temp > 95) {
-    return '1. IMMEDIATELY isolate machine power.\n2. Check coolant fluid levels and thermal sensor.\n3. Notify supervisor before restarting.';
-  }
-  if (status.includes('ERROR')) {
-    return '1. Check power feed and circuit breakers.\n2. Inspect for physical damage or loose connections.\n3. Run diagnostic self-test before restart.';
-  }
-  return '1. Schedule preventive maintenance within 24 hours.\n2. Monitor temperature trend over next 2 hours.\n3. Alert floor supervisor if status worsens.';
+  if (status.includes('OVERHEAT'))
+    return '1. IMMEDIATELY shut down the machine via STOP command.\n2. Check coolant fluid levels and circulation pump.\n3. Replace thermal sensor if readings remain abnormal.\n4. Do NOT restart until temperature drops below 60°C.';
+  if (status.includes('POWER_LOSS'))
+    return '1. Check main power feed and circuit breakers at panel.\n2. Inspect power supply unit for physical damage.\n3. Test backup UPS connection.\n4. Issue START command once power is restored.';
+  if (status.includes('SENSOR'))
+    return '1. Inspect vibration sensor cable for loose or broken connections.\n2. Replace sensor module (Part #VBS-440).\n3. Recalibrate sensor array using C2D → Custom Payload: {"action":"calibrate"}.\n4. Verify readings are non-zero before clearing ticket.';
+  if (status.includes('COMM_TIMEOUT'))
+    return '1. Check network cable or WiFi connection at edge node.\n2. Verify the edge agent process is running on the device.\n3. Reboot edge node remotely via STOP → START commands.\n4. Check firewall rules if issue persists.';
+  if (status.includes('HIGH_VIB'))
+    return '1. Reduce machine load by 30% immediately.\n2. Inspect rotor balance and coupling alignment.\n3. Check for foreign objects or mechanical obstruction.\n4. Schedule bearing inspection within 4 hours.';
+  if (status.includes('COOLANT'))
+    return '1. Check coolant pump flow rate — minimum 15 L/min required.\n2. Inspect coolant level in reservoir.\n3. Clean heat exchanger fins if blocked.\n4. Reduce operational speed by 20% until temperature normalises.';
+  if (status.includes('BEARING'))
+    return '1. Schedule planned downtime within 24 hours for bearing replacement.\n2. Apply emergency lubrication via access port B.\n3. Reduce RPM to below 1200 until maintenance is completed.\n4. Part required: Bearing Kit #BRG-7720.';
+  if (status.includes('MAINTENANCE'))
+    return '1. Schedule preventive maintenance within 24 hours.\n2. Run full diagnostic via C2D → Custom Payload: {"action":"full_diagnostics"}.\n3. Check lubrication levels on all moving parts.\n4. Document findings in maintenance log.';
+  return '1. Inspect machine for visible damage or abnormalities.\n2. Check all sensor connections and power feeds.\n3. Run diagnostic self-test before restart.';
 }
 
 /** Auto-generate a local ticket for a machine in anomaly state. */
@@ -41,9 +71,9 @@ function buildTicket(machine: Machine): Ticket {
   return {
     ticket_id:   `INC-${machine.id.slice(-3)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
     machine_id:  machine.id,
-    priority:    makePriority(machine.status),
+    priority:    makePriority(machine.status) as any,
     status:      'OPEN',
-    description: `Anomaly detected on ${machine.id}: ${machine.status}. Temp: ${machine.temperature}°C, Vibration: ${machine.vibration} mm/s`,
+    description: makeDescription(machine.id, machine.status, machine.temperature, machine.vibration),
     ai_runbook:  makeRunbook(machine.status, machine.temperature),
     created_at:  new Date().toISOString(),
   };
@@ -72,7 +102,7 @@ export default function App() {
   const [isSendingCommand, setIsSendingCommand] = useState(false);
   const [wsConnected,      setWsConnected]      = useState(false);
 
-  const [isDark,      setIsDark]      = useState(true);
+  const [isDark,      setIsDark]      = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeNav,   setActiveNav]   = useState('dashboard');
 
@@ -143,7 +173,7 @@ export default function App() {
       const raw = await res.json();
       const parsed = raw.body ? JSON.parse(raw.body) : raw;
       const mData: Machine[] = (parsed.machines || []).map((m: any) => ({ ...m, id: m.id || m.MachineID }));
-      const tData: Ticket[]  = (parsed.tickets  || []).map((t: any) => ({ ...t }));
+      const tData: Ticket[]  = (parsed.tickets  || []).map((t: any) => ({ ...t, dispatched_expert: t.AssignedTo }));
       if (mData.length > 0) {
         setMachines(mData);
         setSelectedMachineId(prev => prev || mData[0].id);
@@ -222,27 +252,8 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, userRole, assignedMachineId]);
 
-  // ── Resolve ticket ─────────────────────────────────────────────────────────
-  const handleResolveTicket = async (ticketId: string) => {
-    // Optimistic local update — always works
-    setTickets(prev => prev.map(t => t.ticket_id === ticketId ? { ...t, status: 'RESOLVED' } : t));
-    // Find the machine and allow it to re-ticket if it's still broken
-    const ticket = tickets.find(t => t.ticket_id === ticketId);
-    if (ticket) ticketedMachines.current.delete(ticket.machine_id);
-    addToast('success', 'Ticket Resolved', `Ticket ${ticketId} marked as RESOLVED.`);
-
-    // Also try to persist to cloud (fire-and-forget)
-    if (API_URL) {
-      fetch(`${API_URL}/tickets`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticket_id: ticketId, action: 'RESOLVE' }),
-      }).catch(() => {});
-    }
-  };
-
   // ── Send C2D command ───────────────────────────────────────────────────────
-  const handleSendCommand = async (machineId: string, command: 'START' | 'STOP' | 'PUSH_OTA', extraPayload?: any) => {
+  const handleSendCommand = useCallback(async (machineId: string, command: string, extraPayload?: any) => {
     setIsSendingCommand(true);
     const startTime = Date.now();
     const payload = { machine_id: machineId, command, ...(extraPayload || {}) };
@@ -264,13 +275,83 @@ export default function App() {
         status: 'SUCCESS', httpStatus: 200,
       };
       setCommandLogs(prev => [log, ...prev]);
-      addToast('success', `C2D Command Sent (${latency}ms)`, `Dispatched '${command}' to ${machineId}.`);
+      if (command !== 'RESOLVE_ISSUE') {
+        addToast('success', `C2D Command Sent (${latency}ms)`, `Dispatched '${command}' to ${machineId}.`);
+      }
     } catch (err: any) {
       addToast('error', 'C2D Dispatch Failed', err.message);
     } finally {
       setIsSendingCommand(false);
     }
+  }, [addToast]);
+
+  // ── Cross-Tab Notification Listener ────────────────────────────────────────
+  // ── Cross-Tab Notification Listener ────────────────────────────────────────
+  useEffect(() => {
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('mfg_dx_notifications');
+      channel.onmessage = (event) => {
+        const msg = event.data;
+        if (msg.type === 'ISSUE_RESOLVED') {
+          setTickets(prev => prev.map(t => t.ticket_id === msg.ticketId ? { ...t, status: 'RESOLVED' } : t));
+          const ticket = tickets.find(t => t.ticket_id === msg.ticketId);
+          if (ticket) ticketedMachines.current.delete(ticket.machine_id);
+          
+          if (userRole === 'Admin') {
+            addToast('success', '✅ Issue Resolved by Operator', `${msg.expertName} successfully resolved ${msg.ticketId} on ${msg.machineId} at ${msg.resolvedAt}.`);
+            // Heal the simulator directly so it doesn't regenerate the ticket!
+            handleSendCommand(msg.machineId, 'RESOLVE_ISSUE');
+          }
+        }
+      };
+    } catch { /* ignore */ }
+    return () => channel?.close();
+  }, [userRole, tickets, addToast, handleSendCommand]);
+
+  // ── Resolve ticket ─────────────────────────────────────────────────────────
+  const handleResolveTicket = async (ticketId: string, expertName?: string, _notes?: string) => {
+    setTickets(prev => prev.map(t => t.ticket_id === ticketId ? { ...t, status: 'RESOLVED' } : t));
+    const ticket = tickets.find(t => t.ticket_id === ticketId);
+    
+    if (ticket) {
+      ticketedMachines.current.delete(ticket.machine_id);
+      
+      // OPTIMISTICALLY HEAL THE MACHINE LOCALLY FOR INSTANT GREEN FEEDBACK!
+      setMachines(prev => prev.map(m => 
+        m.id === ticket.machine_id 
+          ? { ...m, status: 'HEALTHY' as any, temperature: 45, vibration: 2.0, power_kw: 5.0, rpm: 1450 } 
+          : m
+      ));
+    }
+
+    if (expertName) {
+      addToast('success', '👷 Expert Dispatched!', `${expertName} has been notified and dispatched to ${ticket?.machine_id || 'the machine'}.`);
+    } else {
+      addToast('success', 'Ticket Resolved', `Ticket ${ticketId} marked as RESOLVED.`);
+    }
+    if (API_URL) {
+      fetch(`${API_URL}/tickets`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticket_id: ticketId, action: 'RESOLVE', expert: expertName }),
+      }).catch(() => {});
+    }
   };
+
+  const handleDispatchExpert = (ticketId: string, expertName: string) => {
+    addToast('success', '👷 Expert Dispatched!', `${expertName} has been dispatched. Waiting for resolution...`);
+    setTickets(prev => prev.map(t => t.ticket_id === ticketId ? { ...t, dispatched_expert: expertName } : t));
+    if (API_URL) {
+      fetch(`${API_URL}/tickets`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticket_id: ticketId, action: 'ASSIGN', assigned_to: expertName }),
+      }).catch(() => {});
+    }
+  };
+
+
 
   // ── Manual refresh ─────────────────────────────────────────────────────────
   const handleRefresh = useCallback(() => fetchInitialData(), [fetchInitialData]);
@@ -289,8 +370,15 @@ export default function App() {
   if (userRole === 'Operator') {
     const assignedMachine = machines.find(m => m.id === assignedMachineId) || null;
     return (
-      <div className={`h-screen overflow-hidden ${isDark ? 'bg-slate-950' : 'bg-slate-100'} p-4 sm:p-6`}>
-        <OperatorDashboard machine={assignedMachine} tickets={tickets} isDark={isDark} onLogout={handleLogout} />
+      <div className={`h-screen overflow-hidden ${isDark ? 'bg-slate-950' : 'bg-slate-100'} p-4 sm:p-6 transition-colors duration-500`}>
+        <OperatorDashboard 
+          machine={assignedMachine} 
+          tickets={tickets} 
+          isDark={isDark} 
+          onLogout={handleLogout} 
+          currentUser={currentUser}
+          onToggleTheme={() => setIsDark(!isDark)}
+        />
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       </div>
     );
@@ -335,12 +423,14 @@ export default function App() {
         <div className={`border-t ${isDark ? 'border-slate-800' : 'border-slate-200'} p-3`}>
           {sidebarOpen ? (
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">A</div>
+              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                {(currentUser.name || currentUser.email || 'A')[0].toUpperCase()}
+              </div>
               <div className="overflow-hidden flex-1">
-                <p className={`text-xs font-semibold truncate ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{currentUser.email}</p>
+                <p className={`text-xs font-semibold truncate ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{currentUser.name || currentUser.email}</p>
                 <p className="text-xs text-slate-500 truncate">Administrator</p>
               </div>
-              <button onClick={handleLogout} className="ml-auto flex items-center gap-1 bg-slate-800/50 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 px-2 py-1.5 rounded-lg transition-colors text-xs font-semibold border border-transparent hover:border-rose-500/20">
+              <button onClick={handleLogout} className={`ml-auto flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors text-xs font-semibold border ${isDark ? 'bg-slate-800/50 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 border-transparent hover:border-rose-500/20' : 'bg-rose-50 hover:bg-rose-100 text-rose-600 border-rose-200'}`}>
                 ⇥ Logout
               </button>
             </div>
@@ -410,6 +500,7 @@ export default function App() {
               <ActiveTicketsWidget
                 tickets={tickets}
                 onResolveTicket={handleResolveTicket}
+                onDispatchExpert={handleDispatchExpert}
                 onRefresh={handleRefresh}
                 isLoading={false}
                 onSelectMachine={setSelectedMachineId}

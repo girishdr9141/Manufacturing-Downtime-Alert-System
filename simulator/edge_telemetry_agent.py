@@ -35,25 +35,42 @@ class EdgeMachine:
         self.is_running = True
         self.x = random.randint(10, 90)
         self.y = random.randint(10, 90)
-        self.locked_error = False  # If True, tick() won't heal it
+        self.locked_error = False
 
-        # Force demo nodes into specific states
+        # ── Demo nodes: diverse failure modes for presentation ──
         if id_num == 3:
             self.status = "CRITICAL_OVERHEAT"
             self.temperature = 108.0
             self.locked_error = True
         elif id_num == 7:
             self.status = "ERROR_POWER_LOSS"
-            self.power_kw = 0
+            self.power_kw = 0.0
             self.rpm = 0
             self.is_running = False
             self.locked_error = True
         elif id_num == 11:
-            self.status = "WARNING_TEMP"
-            self.temperature = 82.0
+            self.status = "WARNING_HIGH_VIBRATION"
+            self.vibration = 9.4
+            self.temperature = 71.0
         elif id_num == 15:
-            self.status = "WARNING_TEMP"
-            self.temperature = 85.0
+            self.status = "WARNING_COOLANT_TEMP"
+            self.temperature = 83.0
+        elif id_num == 19:
+            self.status = "ERROR_SENSOR_FAILURE"
+            self.vibration = 0.0  # Sensor reads zero — failure
+            self.locked_error = True
+        elif id_num == 22:
+            self.status = "WARNING_BEARING_WEAR"
+            self.vibration = 7.1
+            self.rpm = 1100  # Sluggish RPM
+        elif id_num == 24:
+            self.status = "PREDICTIVE_MAINTENANCE_DUE"
+            self.temperature = 78.0
+            self.vibration = 5.5
+        elif id_num == 5:
+            self.status = "ERROR_COMM_TIMEOUT"
+            self.power_kw = 0.1
+            self.locked_error = True
 
     def process_command(self, cmd):
         print(f"\n[!] C2D COMMAND RECEIVED at {self.machine_id}: {cmd}")
@@ -66,6 +83,17 @@ class EdgeMachine:
         elif cmd == 'START':
             self.status = "HEALTHY"
             self.is_running = True
+        elif cmd == 'RESOLVE_ISSUE':
+            # Expert has resolved the issue on the floor!
+            # Unlock the error state and heal the machine telemetry.
+            self.locked_error = False
+            self.status = "HEALTHY"
+            self.is_running = True
+            self.temperature = random.uniform(40, 50)
+            self.vibration = random.uniform(1.0, 3.0)
+            self.power_kw = random.uniform(4.5, 5.5)
+            self.rpm = random.randint(1400, 1500)
+            print(f"[*] {self.machine_id} has been physically repaired and healed.")
 
     def tick(self):
         if self.locked_error:

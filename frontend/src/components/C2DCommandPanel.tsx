@@ -114,23 +114,32 @@ export const C2DCommandPanel: React.FC<C2DCommandPanelProps> = ({
 
         {/* Command Buttons */}
         <div className="grid grid-cols-3 gap-3 mb-4">
-          <button onClick={() => handleExecuteCommand('STOP')} disabled={isSending}
-            className={`border-2 font-mono text-xs font-bold py-3 px-2 rounded-xl transition-all duration-200 flex flex-col items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 group ${isDark ? 'bg-slate-950 hover:bg-rose-950/50 border-rose-500/60 hover:border-rose-400 text-rose-400 hover:text-rose-200' : 'bg-rose-50 hover:bg-rose-100 border-rose-400 text-rose-600 hover:text-rose-800'}`}>
-            <Square className="w-4 h-4 group-hover:scale-110 transition-transform fill-rose-500/20" />
-            <span>STOP</span>
-          </button>
+          <div className="flex flex-col gap-1">
+            <button onClick={() => handleExecuteCommand('STOP')} disabled={isSending}
+              className={`border-2 font-mono text-xs font-bold py-3 px-2 rounded-xl transition-all duration-200 flex flex-col items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 group ${isDark ? 'bg-slate-950 hover:bg-rose-950/50 border-rose-500/60 hover:border-rose-400 text-rose-400 hover:text-rose-200' : 'bg-rose-50 hover:bg-rose-100 border-rose-400 text-rose-600 hover:text-rose-800'}`}>
+              <Square className="w-4 h-4 group-hover:scale-110 transition-transform fill-rose-500/20" />
+              <span>STOP</span>
+            </button>
+            <p className={`text-[9px] text-center font-sans leading-tight px-1 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>Emergency shutdown. Cuts power & RPM to zero immediately.</p>
+          </div>
 
-          <button onClick={() => handleExecuteCommand('START')} disabled={isSending}
-            className={`border-2 font-mono text-xs font-bold py-3 px-2 rounded-xl transition-all duration-200 flex flex-col items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 group ${isDark ? 'bg-slate-950 hover:bg-emerald-950/50 border-emerald-500/60 hover:border-emerald-400 text-emerald-400 hover:text-emerald-200' : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-400 text-emerald-600 hover:text-emerald-800'}`}>
-            <Play className="w-4 h-4 group-hover:scale-110 transition-transform fill-emerald-500/20" />
-            <span>START</span>
-          </button>
+          <div className="flex flex-col gap-1">
+            <button onClick={() => handleExecuteCommand('START')} disabled={isSending}
+              className={`border-2 font-mono text-xs font-bold py-3 px-2 rounded-xl transition-all duration-200 flex flex-col items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 group ${isDark ? 'bg-slate-950 hover:bg-emerald-950/50 border-emerald-500/60 hover:border-emerald-400 text-emerald-400 hover:text-emerald-200' : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-400 text-emerald-600 hover:text-emerald-800'}`}>
+              <Play className="w-4 h-4 group-hover:scale-110 transition-transform fill-emerald-500/20" />
+              <span>START</span>
+            </button>
+            <p className={`text-[9px] text-center font-sans leading-tight px-1 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>Remotely boot the machine back to normal operation.</p>
+          </div>
 
-          <button onClick={() => handleExecuteCommand('PUSH_OTA')} disabled={isSending}
-            className={`border-2 font-mono text-xs font-bold py-3 px-2 rounded-xl transition-all duration-200 flex flex-col items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 group ${isDark ? 'bg-slate-950 hover:bg-amber-950/50 border-amber-500/60 hover:border-amber-400 text-amber-400 hover:text-amber-200' : 'bg-amber-50 hover:bg-amber-100 border-amber-400 text-amber-600 hover:text-amber-800'}`}>
-            <UploadCloud className="w-4 h-4 group-hover:scale-110 transition-transform" />
-            <span>Push OTA</span>
-          </button>
+          <div className="flex flex-col gap-1">
+            <button onClick={() => handleExecuteCommand('PUSH_OTA')} disabled={isSending}
+              className={`border-2 font-mono text-xs font-bold py-3 px-2 rounded-xl transition-all duration-200 flex flex-col items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 group ${isDark ? 'bg-slate-950 hover:bg-amber-950/50 border-amber-500/60 hover:border-amber-400 text-amber-400 hover:text-amber-200' : 'bg-amber-50 hover:bg-amber-100 border-amber-400 text-amber-600 hover:text-amber-800'}`}>
+              <UploadCloud className="w-4 h-4 group-hover:scale-110 transition-transform" />
+              <span>PUSH OTA</span>
+            </button>
+            <p className={`text-[9px] text-center font-sans leading-tight px-1 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>Over-The-Air firmware update. Pushes latest software to the edge device wirelessly.</p>
+          </div>
         </div>
 
         {/* Advanced JSON Toggle */}

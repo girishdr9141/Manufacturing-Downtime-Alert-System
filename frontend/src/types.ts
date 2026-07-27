@@ -17,6 +17,8 @@ export interface Ticket {
     power_kw: number;
     rpm: number;
   };
+  dispatched_expert?: string;
+  dispatched_notes?: string;
 }
 
 export type MachineStatus = 'HEALTHY' | 'ERROR' | 'WARNING';

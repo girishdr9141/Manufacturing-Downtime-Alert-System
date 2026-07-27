@@ -45,8 +45,11 @@ def lambda_handler(event, context):
             role = item.get('Role')
             sub_machine = item.get('MachineID')
             
-            # Send the command to the Operator screen of the targeted machine
-            if role == 'Operator' and sub_machine == target_machine_id:
+            # Send the command to the Operator screen of the targeted machine OR the physical edge simulator
+            is_operator_target = (role == 'Operator' and sub_machine == target_machine_id)
+            is_simulator = (role == 'EdgeSimulator')
+            
+            if is_operator_target or is_simulator:
                 msg = json.dumps({
                     "type": "C2D_COMMAND",
                     "command": command,
