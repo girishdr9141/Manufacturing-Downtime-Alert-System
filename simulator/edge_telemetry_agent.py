@@ -97,7 +97,8 @@ class EdgeMachine:
             self.vibration = random.uniform(1.0, 3.0)
             self.power_kw = random.uniform(4.5, 5.5)
             self.rpm = random.randint(1400, 1500)
-            print(f"[*] {self.machine_id} has been physically repaired and healed.")
+            self.immune_until = time.time() + 120
+            print(f"[*] {self.machine_id} has been physically repaired and is IMMUNE to failure for 120s.")
 
     def tick(self):
         if self.locked_error:
@@ -105,9 +106,16 @@ class EdgeMachine:
         if not self.is_running:
             return
 
-        # Simulate wear and tear
-        self.temperature += random.uniform(-1, 1.5)
-        self.vibration += random.uniform(-0.1, 0.15)
+        is_immune = hasattr(self, 'immune_until') and time.time() < self.immune_until
+
+        if is_immune:
+            # Machine was just repaired, keep it running smoothly
+            self.temperature = random.uniform(40, 50)
+            self.vibration = random.uniform(1.0, 3.0)
+        else:
+            # Simulate normal wear and tear
+            self.temperature += random.uniform(-1, 1.5)
+            self.vibration += random.uniform(-0.1, 0.15)
 
         if self.temperature > 95:
             self.status = "CRITICAL_OVERHEAT"
@@ -119,7 +127,7 @@ class EdgeMachine:
             self.status = "HEALTHY"
 
         # Random sudden failure (0.5% chance per tick)
-        if random.random() < 0.005:
+        if not is_immune and random.random() < 0.005:
             self.status = "ERROR_POWER_LOSS"
             self.power_kw = 0
             self.is_running = False

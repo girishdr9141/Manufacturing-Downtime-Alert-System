@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Machine, Ticket } from '../types';
 import { useI18n } from '../i18n';
 import { Activity, Thermometer, Zap, AlertOctagon, CheckCircle2, UserCheck, Bell, ClipboardCheck, LogOut, CheckCircle, User, AlertTriangle, AlertCircle } from 'lucide-react';
+import { PredictiveMaintenanceWidget } from './PredictiveMaintenanceWidget';
 
 interface DispatchJob {
   ticketId: string;
@@ -104,6 +105,36 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, t
       channel.close();
     } catch { /* ignore */ }
   }, [assignedJobs]);
+  const [commandSent, setCommandSent] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+
+  // Predictive Engine history tracking
+  useEffect(() => {
+    if (machine) {
+      setHistory(prev => {
+        let riskScore = 0;
+        const isAlreadyFailed = machine.status.includes('ERROR') || machine.status.includes('CRITICAL');
+
+        if (isAlreadyFailed) {
+          riskScore = 100;
+        } else if (machine.temperature > 80 || machine.vibration > 8) {
+          riskScore = Math.min(100, Math.max(0, ((machine.temperature - 60) * 1.5) + (machine.vibration * 5)));
+        } else {
+          riskScore = Math.min(100, Math.max(0, ((machine.temperature - 50) * 0.8) + (machine.vibration * 2)));
+        }
+        
+        const newPoint = {
+          timestamp: new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          temperature: machine.temperature,
+          vibration: machine.vibration,
+          riskScore: Math.round(riskScore)
+        };
+        const updated = [...prev, newPoint];
+        if (updated.length > 25) updated.shift(); // Keep last 25 ticks
+        return updated;
+      });
+    }
+  }, [machine?.temperature, machine?.vibration, machine?.id, machine?.status]);
 
   const activeTickets = tickets.filter(t => machine && t.machine_id === machine.id && t.status !== 'RESOLVED');
 
@@ -123,7 +154,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, t
   const mRpm = machine?.rpm || 0;
 
   return (
-    <div className={`flex flex-col h-full space-y-4 font-sans transition-colors duration-500 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+    <div className={`flex flex-col min-h-full space-y-4 font-sans transition-colors duration-500 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
 
       {/* ── Incoming Job Alert Banner ── */}
       {newJobAlert && (
@@ -179,10 +210,11 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, t
       </div>
 
       {/* ── Main grid ── */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-4 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
 
-        {/* Telemetry gauges */}
-        <div className="lg:col-span-2 grid grid-cols-2 gap-4">
+        {/* Telemetry gauges and Predictive Widget */}
+        <div className="lg:col-span-2 flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-4">
           {[
             { icon: <Thermometer className="w-7 h-7" />, value: `${mTemp.toFixed(1)}°C`, label: t('coreTemp'), warn: mTemp > 80, critical: mTemp > 95 },
             { icon: <Activity className="w-7 h-7" />, value: `${mVib.toFixed(2)} mm/s`, label: t('vibration'), warn: mVib > 6, critical: mVib > 9 },
@@ -198,12 +230,14 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, t
             </div>
           ))}
         </div>
+        <PredictiveMaintenanceWidget data={history} isDark={isDark} />
+        </div>
 
         {/* Right panel: Assigned Jobs + Active Alerts */}
-        <div className="lg:col-span-3 flex flex-col gap-4 min-h-0">
+        <div className="lg:col-span-3 flex flex-col gap-4">
 
           {/* ── Assigned Work Orders from Admin ── */}
-          <div className={`flex-1 rounded-2xl border p-5 flex flex-col min-h-[300px] overflow-hidden ${card}`}>
+          <div className={`rounded-2xl border p-5 flex flex-col min-h-[300px] ${card}`}>
             <h2 className="text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
               <User className="w-4 h-4 text-blue-500" /> {t('assignedWorkOrders')}
             </h2>
@@ -268,7 +302,6 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, t
               ))}
             </div>
           </div>
-
         </div>
       </div>
     </div>

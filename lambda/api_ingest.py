@@ -38,7 +38,10 @@ def broadcast_to_connections(payload_dict):
     items    = response.get('Items', [])
     machine_id = payload_dict.get('machine_id')
 
-    msg = json.dumps({"type": "TELEMETRY_UPDATE", "data": payload_dict}, cls=DecimalEncoder)
+    if "type" in payload_dict:
+        msg = json.dumps(payload_dict, cls=DecimalEncoder)
+    else:
+        msg = json.dumps({"type": "TELEMETRY_UPDATE", "data": payload_dict}, cls=DecimalEncoder)
 
     for item in items:
         conn_id    = item.get('ConnectionId')
@@ -61,6 +64,20 @@ def lambda_handler(event, context):
             payload = json.loads(body) if isinstance(body, str) else body
         else:
             payload = event
+
+        action = payload.get('action')
+
+        if action == 'C2D_COMMAND':
+            broadcast_to_connections({
+                "type": "C2D_COMMAND",
+                "machine_id": payload.get('machine_id'),
+                "command": payload.get('command')
+            })
+            return {
+                'statusCode': 200,
+                'headers': {'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'message': 'Command dispatched'})
+            }
 
         machine_id  = payload.get('machine_id', 'UNKNOWN')
         status      = payload.get('status', 'HEALTHY')

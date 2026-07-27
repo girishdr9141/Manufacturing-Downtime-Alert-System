@@ -263,12 +263,12 @@ export default function App() {
     const payload = { machine_id: machineId, command, ...(extraPayload || {}) };
     try {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify(payload));
+        wsRef.current.send(JSON.stringify({ action: 'C2D_COMMAND', ...payload }));
       } else if (API_URL) {
-        await fetch(`${API_URL}/commands`, {
+        await fetch(`${API_URL}/telemetry`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ action: 'C2D_COMMAND', ...payload }),
         });
       }
       const latency = Date.now() - startTime;
@@ -300,7 +300,14 @@ export default function App() {
         if (msg.type === 'ISSUE_RESOLVED') {
           setTickets(prev => prev.map(t => t.ticket_id === msg.ticketId ? { ...t, status: 'RESOLVED', resolved_at: new Date().toISOString() } : t));
           const ticket = tickets.find(t => t.ticket_id === msg.ticketId);
-          if (ticket) ticketedMachines.current.delete(ticket.machine_id);
+          if (ticket) {
+            ticketedMachines.current.delete(ticket.machine_id);
+            
+            // Optimistically heal the machine locally so the UI (including ML graphs) drops to 0% instantly
+            setMachines(prev => prev.map(m => m.id === ticket.machine_id ? { ...m, status: 'HEALTHY' as any } : m));
+            
+            handleSendCommand(ticket.machine_id, 'RESOLVE_ISSUE');
+          }
           
           if (userRole === 'Admin') {
             addToast('success', '✅ Issue Resolved by Operator', `${msg.expertName} successfully resolved ${msg.ticketId} on ${msg.machineId} at ${msg.resolvedAt}.`);
@@ -327,6 +334,9 @@ export default function App() {
           ? { ...m, status: 'HEALTHY' as any, temperature: 45, vibration: 2.0, power_kw: 5.0, rpm: 1450 } 
           : m
       ));
+      
+      // Tell the physical simulator to heal!
+      handleSendCommand(ticket.machine_id, 'RESOLVE_ISSUE');
     }
 
     if (expertName) {
@@ -374,7 +384,7 @@ export default function App() {
   if (userRole === 'Operator') {
     const assignedMachine = machines.find(m => m.id === assignedMachineId) || null;
     return (
-      <div key="operator-view" className={`h-screen overflow-hidden ${isDark ? 'bg-slate-950' : 'bg-slate-100'} p-4 sm:p-6 transition-colors duration-500`}>
+      <div key="operator-view" className={`min-h-screen overflow-y-auto ${isDark ? 'bg-slate-950' : 'bg-slate-100'} p-4 sm:p-6 transition-colors duration-500`}>
         <OperatorDashboard 
           machine={assignedMachine} 
           tickets={tickets} 
