@@ -6,6 +6,7 @@ import requests
 import asyncio
 import websockets
 import os
+from flask import Flask
 from datetime import datetime
 
 # ==============================================================
@@ -183,15 +184,31 @@ if WS_URL:
     ws_thread.start()
 
 # --- REST TELEMETRY INGESTION ---
-while True:
-    print(f"\n--- Broadcasting Telemetry for {NUM_MACHINES} nodes ---")
-    for m in machines:
-        m.tick()
-        payload = m.to_dict()
-        try:
-            res = requests.post(API_URL, json=payload, timeout=2)
-            if res.status_code != 200:
-                print(f"Post failed {m.machine_id}: {res.text}")
-        except Exception as e:
-            print(f"Failed to post for {m.machine_id}")
-    time.sleep(POLL_INTERVAL_SECONDS)
+def run_telemetry_loop():
+    while True:
+        print(f"\n--- Broadcasting Telemetry for {NUM_MACHINES} nodes ---")
+        for m in machines:
+            m.tick()
+            payload = m.to_dict()
+            try:
+                res = requests.post(API_URL, json=payload, timeout=2)
+                if res.status_code != 200:
+                    print(f"Post failed {m.machine_id}: {res.text}")
+            except Exception as e:
+                print(f"Failed to post for {m.machine_id}")
+        time.sleep(POLL_INTERVAL_SECONDS)
+
+telemetry_thread = threading.Thread(target=run_telemetry_loop, daemon=True)
+telemetry_thread.start()
+
+# --- FLASK WEB SERVER FOR RENDER ---
+app = Flask(__name__)
+
+@app.route('/')
+@app.route('/ping')
+def ping():
+    return "200 OK - Simulator is alive", 200
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
