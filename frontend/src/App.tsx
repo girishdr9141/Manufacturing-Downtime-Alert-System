@@ -230,8 +230,20 @@ export default function App() {
 
           setMachines(prev => {
             const updated = prev.find(m => m.id === machineId)
-              ? prev.map(m => m.id === machineId ? { ...m, ...d, id: machineId, status: d.status || m.status } : m)
-              : [...prev, { ...d, id: machineId }];
+              ? prev.map(m => m.id === machineId ? { 
+                  ...m, 
+                  ...d, 
+                  id: machineId, 
+                  status: d.status || m.status,
+                  firmware: d.firmware || m.firmware || 'v1.0.0',
+                  ip_address: d.ip_address || m.ip_address || '127.0.0.1'
+                } : m)
+              : [...prev, { 
+                  ...d, 
+                  id: machineId,
+                  firmware: d.firmware || 'v1.0.0',
+                  ip_address: d.ip_address || '127.0.0.1'
+                }];
 
             // Auto-generate tickets from updated list (next tick)
             setTimeout(() => syncTicketsFromMachines(updated), 0);

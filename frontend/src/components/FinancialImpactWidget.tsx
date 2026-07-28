@@ -27,11 +27,11 @@ export const FinancialImpactWidget: React.FC<FinancialImpactWidgetProps> = ({ ti
       tickets.forEach(ticket => {
         const createdTime = new Date(ticket.created_at).getTime();
 
-        if (ticket.status === 'OPEN' && (ticket.priority === 'CRITICAL' || ticket.priority === 'P1')) {
+        if (ticket.status === 'OPEN') {
           const now = Date.now();
           const downMinutes = (now - createdTime) / 1000 / 60;
           lostUsd += downMinutes * COST_PER_MIN_USD;
-        } else if (ticket.status === 'RESOLVED' && ticket.resolved_at && (ticket.priority === 'CRITICAL' || ticket.priority === 'P1')) {
+        } else if (ticket.status === 'RESOLVED' && ticket.resolved_at) {
           const resolvedTime = new Date(ticket.resolved_at).getTime();
           let downMinutes = (resolvedTime - createdTime) / 1000 / 60;
           
