@@ -12,18 +12,22 @@ from datetime import datetime
 # ==============================================================
 # CONFIGURATION
 # ==============================================================
-env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'frontend', '.env'))
-API_URL = ""
-WS_URL = ""
-try:
-    with open(env_path, 'r') as f:
-        for line in f:
-            if line.startswith('VITE_API_URL='):
-                API_URL = line.split('=', 1)[1].strip()
-            elif line.startswith('VITE_WS_URL='):
-                WS_URL = line.split('=', 1)[1].strip()
-except Exception as e:
-    print(f"WARNING: Could not read {env_path}. Make sure it exists!")
+# First try to get them from standard environment variables (Render/Vercel)
+API_URL = os.environ.get("VITE_API_URL", "")
+WS_URL = os.environ.get("VITE_WS_URL", "")
+
+# If not found (e.g. running locally), fallback to reading the frontend/.env file directly
+if not API_URL or not WS_URL:
+    env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'frontend', '.env'))
+    try:
+        with open(env_path, 'r') as f:
+            for line in f:
+                if line.startswith('VITE_API_URL='):
+                    API_URL = line.split('=', 1)[1].strip()
+                elif line.startswith('VITE_WS_URL='):
+                    WS_URL = line.split('=', 1)[1].strip()
+    except Exception as e:
+        print(f"WARNING: Could not read {env_path}. Make sure it exists!")
 
 if not API_URL.endswith('/telemetry') and API_URL:
     API_URL = API_URL.rstrip('/') + '/telemetry'
