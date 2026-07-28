@@ -38,7 +38,7 @@ const translations = {
     costPerMin: '₹290/min per offline node',
     expertAssigned: 'Expert Assigned to You!',
     dispatchedTo: 'has been dispatched to your machine.',
-    loginTitle: 'Manufacturing DX',
+    loginTitle: 'ZeroStop Diagnostics',
     loginSubtitle: 'Secure Remote Operations Portal',
     aiPredictiveEngine: 'AI Predictive Engine',
     failureProbability: 'Failure Probability',
