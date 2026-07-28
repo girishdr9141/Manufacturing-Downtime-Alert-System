@@ -50,6 +50,8 @@ class EdgeMachine:
         self.x = random.randint(10, 90)
         self.y = random.randint(10, 90)
         self.locked_error = False
+        self.firmware = random.choice(['v2.4.1', 'v2.4.2', 'v2.4.5', 'v3.0.1-beta'])
+        self.ip_address = f"192.168.10.{100 + id_num}"
 
         # ── Demo nodes: diverse failure modes for presentation ──
         if id_num == 3:
@@ -155,7 +157,9 @@ class EdgeMachine:
             "power_kw": round(self.power_kw, 2),
             "rpm": self.rpm,
             "x": self.x,
-            "y": self.y
+            "y": self.y,
+            "firmware": self.firmware,
+            "ip_address": self.ip_address
         }
 
 machines = [EdgeMachine(i+1) for i in range(NUM_MACHINES)]
