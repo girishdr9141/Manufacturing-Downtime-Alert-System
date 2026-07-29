@@ -16,6 +16,7 @@ Globals:
         HISTORY_TABLE: !Ref MfgTelemetryHistoryTable
         CONNECTIONS_TABLE: !Ref MfgConnectionsTable
         AUDIT_TABLE: !Ref MfgAuditLogsTable
+        USERS_TABLE: !Ref MfgUsersTable
 
 Resources:
   # ==========================================
@@ -62,6 +63,13 @@ Resources:
     Properties:
       PrimaryKey:
         Name: ConnectionId
+        Type: String
+
+  MfgUsersTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      PrimaryKey:
+        Name: Email
         Type: String
 
   # ==========================================
@@ -157,6 +165,21 @@ Resources:
           Properties:
             Path: /data
             Method: get
+
+  # --- REST: Authentication ---
+  AuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/
+      Handler: api_auth.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref MfgUsersTable }
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /auth
+            Method: any
 
   # --- WEBSOCKET: Connect ---
   WsConnectFunction:

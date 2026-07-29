@@ -29,18 +29,43 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, isDark, 
     setError(null);
     setIsLoading(true);
 
+    const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+
     try {
-      if (mode === 'LOGIN') {
-        setTimeout(() => {
-          onLoginSuccess({ email, name: name || 'User' }, role, role === 'Operator' ? machineId : undefined);
-          setIsLoading(false);
-        }, 800);
-      } 
-      else if (mode === 'SIGNUP') {
-        setTimeout(() => {
-          onLoginSuccess({ email, name: name || 'User' }, role, role === 'Operator' ? machineId : undefined);
-          setIsLoading(false);
-        }, 800);
+      if (mode === 'LOGIN' || mode === 'SIGNUP') {
+        if (!API_URL) {
+          // Fallback if local without API
+          setTimeout(() => {
+            onLoginSuccess({ email, name: name || email.split('@')[0] }, role, role === 'Operator' ? machineId : undefined);
+            setIsLoading(false);
+          }, 800);
+          return;
+        }
+
+        const response = await fetch(`${API_URL}/auth`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            action: mode, 
+            email, 
+            password, 
+            role, 
+            machine_id: machineId 
+          })
+        });
+
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.message || 'Authentication failed');
+        }
+
+        onLoginSuccess(
+          { email, name: name || email.split('@')[0] }, 
+          data.role || role, 
+          data.machine_id
+        );
+        setIsLoading(false);
       }
       else if (mode === 'CONFIRM') {
         // await confirmSignUp({ username: email, confirmationCode: otp });

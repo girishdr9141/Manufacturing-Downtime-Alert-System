@@ -2,7 +2,7 @@
 
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue) ![Version](https://img.shields.io/badge/version-1.0.0-orange) ![Architecture](https://img.shields.io/badge/architecture-Serverless_AWS-purple)
 
-**ZeroStop Diagnostics** is an enterprise-grade, Zero-Trust secure IoT Edge telemetry platform and Predictive Maintenance dashboard. It is designed to minimize factory downtime, track financial impact in real-time, and execute bi-directional Cloud-to-Device (C2D) commands across a distributed fleet of manufacturing nodes.
+**ZeroStop Diagnostics** is an enterprise-grade, Zero-Trust secure IoT telemetry platform and Predictive Maintenance dashboard. It is designed to minimize factory downtime, track financial impact in real-time, and execute bi-directional Cloud-to-Device (C2D) commands across a distributed fleet of manufacturing nodes.
 
 ---
 
@@ -36,7 +36,7 @@ The application is built on a highly scalable, event-driven serverless architect
   Real-time data visualization using Recharts to plot telemetry history alongside a dynamically calculated "Failure Probability" score, enabling proactive intervention before catastrophic hardware failure.
 
 * **Bi-Directional C2D Control Panel**  
-  Zero-Trust encrypted edge dispatch allowing Administrators to remotely execute hardware commands (Emergency STOP, START, Push OTA Firmware Updates) directly to the physical machines from the web browser.
+  Zero-Trust encrypted edge dispatch allowing Administrators to remotely execute commands (Emergency STOP, START, Push OTA Firmware Updates) directly to the physical machines from the web browser.
 
 * **Automated Ticketing System**  
   Intelligent rule engines evaluate telemetry anomalies and automatically generate priority-based IT/Maintenance work orders. Operators can assign experts, log resolution notes, and physically "heal" the edge nodes.
