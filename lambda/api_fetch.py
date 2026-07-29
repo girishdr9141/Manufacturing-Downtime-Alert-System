@@ -57,7 +57,8 @@ def lambda_handler(event, context):
                     'description': item.get('Description'),
                     'ai_runbook': item.get('AIRunbook'),
                     'created_at': item.get('CreatedAt'),
-                    'resolved_at': item.get('ResolvedAt')
+                    'resolved_at': item.get('ResolvedAt'),
+                    'resolution_notes': item.get('ResolutionNotes')
                 })
 
         return {

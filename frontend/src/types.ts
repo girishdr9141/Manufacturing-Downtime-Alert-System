@@ -12,6 +12,7 @@ export interface Ticket {
   created_at: string;
   updated_at?: string;
   resolved_at?: string;
+  resolution_notes?: string;
   telemetry_snapshot?: {
     temperature: number;
     vibration: number;

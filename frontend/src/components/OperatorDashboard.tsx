@@ -24,11 +24,12 @@ interface OperatorDashboardProps {
   onLogout: () => void;
   currentUser: any;
   onToggleTheme: () => void;
+  onViewHistory?: (machineId: string) => void;
 }
 
 const MFG_CHANNEL = 'mfg_dx_notifications';
 
-export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, tickets, isDark, onLogout, currentUser, onToggleTheme }) => {
+export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, tickets, isDark, onLogout, currentUser, onToggleTheme, onViewHistory }) => {
   const { t, lang, setLang } = useI18n();
   const [assignedJobs, setAssignedJobs] = useState<DispatchJob[]>([]);
   const [newJobAlert, setNewJobAlert]   = useState<DispatchJob | null>(null);
@@ -189,6 +190,15 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ machine, t
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 md:gap-3">
+          {machine && (
+            <button 
+              onClick={() => onViewHistory?.(machine.id)} 
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold font-mono flex items-center gap-2 border transition-colors ${isDark ? 'bg-slate-800/50 hover:bg-slate-800 border-slate-700 text-cyan-400' : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-cyan-600'}`}
+            >
+              <ClipboardCheck className="w-4 h-4" />
+              View History
+            </button>
+          )}
           <button onClick={() => setLang(lang === 'en' ? 'ja' : 'en')} className={`px-2 md:px-3 py-1 rounded-full text-xs font-bold border transition-colors ${isDark ? 'border-slate-700 hover:bg-slate-800 text-slate-300' : 'border-slate-300 hover:bg-slate-200 text-slate-700'}`}>
             {lang === 'en' ? 'EN' : 'JA'}
           </button>

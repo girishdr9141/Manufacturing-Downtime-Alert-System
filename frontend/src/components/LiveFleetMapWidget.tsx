@@ -7,6 +7,7 @@ interface LiveFleetMapWidgetProps {
   tickets: Ticket[];
   selectedMachineId: string;
   onSelectMachine: (machineId: string) => void;
+  onViewHistory?: (machineId: string) => void;
   isDark?: boolean;
 }
 
@@ -15,6 +16,7 @@ export const LiveFleetMapWidget: React.FC<LiveFleetMapWidgetProps> = ({
   tickets,
   selectedMachineId,
   onSelectMachine,
+  onViewHistory,
   isDark = true,
 }) => {
   const [hoveredMachine, setHoveredMachine] = useState<Machine | null>(null);
@@ -158,7 +160,10 @@ export const LiveFleetMapWidget: React.FC<LiveFleetMapWidgetProps> = ({
               key={machine.id}
               style={{ left: `${machine.x}%`, top: `${machine.y}%` }}
               className="absolute -translate-x-1/2 -translate-y-1/2 z-20 cursor-pointer group/pin"
-              onClick={() => onSelectMachine(machine.id)}
+              onClick={() => {
+                onSelectMachine(machine.id);
+                onViewHistory?.(machine.id);
+              }}
               onMouseEnter={() => setHoveredMachine(machine)}
               onMouseLeave={() => setHoveredMachine(null)}
             >
@@ -181,7 +186,14 @@ export const LiveFleetMapWidget: React.FC<LiveFleetMapWidgetProps> = ({
 
         {/* Hover Telemetry Card */}
         {hoveredMachine && (
-          <div className={`absolute bottom-4 left-4 z-30 backdrop-blur-2xl p-3.5 rounded-xl shadow-2xl max-w-xs w-full font-mono text-xs border ${hudBg}`}>
+          <div 
+            className={`absolute z-30 backdrop-blur-2xl p-3.5 rounded-xl shadow-2xl w-60 font-mono text-xs border ${hudBg}`}
+            style={{ 
+              left: `${hoveredMachine.x}%`, 
+              top: `${hoveredMachine.y}%`, 
+              transform: 'translate(-50%, 25px)' 
+            }}
+          >
             <div className={`flex items-center justify-between border-b pb-2 mb-2 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
               <span className={`font-bold tracking-tight flex items-center gap-1.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 <MapPin className="w-3.5 h-3.5 text-cyan-500" />
@@ -218,7 +230,7 @@ export const LiveFleetMapWidget: React.FC<LiveFleetMapWidgetProps> = ({
             </div>
 
             <div className="mt-2 text-[10px] text-cyan-500 font-sans flex items-center justify-end gap-1">
-              Click node to load C2D panel <ExternalLink className="w-3 h-3" />
+              Click node to view history <ExternalLink className="w-3 h-3" />
             </div>
           </div>
         )}

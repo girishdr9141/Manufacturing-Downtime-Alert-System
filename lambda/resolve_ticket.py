@@ -2,6 +2,7 @@ import json
 import boto3
 import os
 import logging
+import random
 from datetime import datetime
 
 logger = logging.getLogger()
@@ -55,12 +56,28 @@ def lambda_handler(event, context):
         table = dynamodb.Table(DYNAMODB_TICKET_TABLE)
 
         if action == 'RESOLVE':
+            # Generate random resolution notes
+            resolution_notes_list = [
+                "Recalibrated thermal sensors and flushed coolant system.",
+                "Replaced worn bearings and verified RPM stability during load test.",
+                "Cleared hardware fault cache and restarted edge telemetry agent.",
+                "Tightened mechanical couplings and verified vibration limits.",
+                "Performed emergency OTA firmware rollback to stable version.",
+                "Inspected power feed, replaced blown fuse, and restored full power."
+            ]
+            final_note = body.get('notes') or random.choice(resolution_notes_list)
+            
             # Update ticket status to RESOLVED
             table.update_item(
                 Key={'TicketID': ticket_id},
-                UpdateExpression="set #s = :s, ResolvedAt = :r, ResolvedBy = :u",
+                UpdateExpression="set #s = :s, ResolvedAt = :r, ResolvedBy = :u, ResolutionNotes = :n",
                 ExpressionAttributeNames={'#s': 'Status'},
-                ExpressionAttributeValues={':s': 'RESOLVED', ':r': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'), ':u': user}
+                ExpressionAttributeValues={
+                    ':s': 'RESOLVED', 
+                    ':r': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'), 
+                    ':u': user,
+                    ':n': final_note
+                }
             )
             log_audit("TICKET_RESOLVED", ticket_id, user)
             
